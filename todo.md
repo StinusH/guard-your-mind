@@ -12,6 +12,9 @@
 - [x] Add MutationObserver for dynamically loaded posts (infinite scroll).
 - [x] Handle mature posts detected in feeds/home/popular/search.
 - [x] Handle Shadow DOM search dropdown (18+ section and recent NSFW searches).
+- [x] Handle sidebar recent pages (filter NSFW subreddits from recent visits).
+- [x] Add SPA navigation detection to persist filtering across page changes.
+- [x] Track visited NSFW subreddits in-memory for cross-page filtering.
 
 ## In Progress
 

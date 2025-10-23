@@ -40,7 +40,10 @@ The extension follows Manifest V3 architecture with three main components:
 2. **Content Script** (`src/content/index.ts`)
    - Injected into all `https://*.reddit.com/*` pages at `document_start`
    - Responsible for detecting and blanking mature content
-   - Must handle both initial page load and dynamic content (infinite scroll via MutationObserver)
+   - Handles both initial page load and dynamic content (infinite scroll via MutationObserver)
+   - Manages Shadow DOM filtering for search dropdown and sidebar recent pages
+   - Tracks visited NSFW subreddits in-memory for cross-page filtering
+   - Detects SPA navigation to persist filtering across page changes
 
 3. **Popup UI** (`src/popup/`)
    - Browser action popup with enable/disable toggle
@@ -64,12 +67,20 @@ The extension follows Manifest V3 architecture with three main components:
 
 ### Content Detection Strategy
 
-The extension must:
+The extension detects mature content through multiple methods:
 
-- Detect mature content via Reddit's 18+ flags/metadata in DOM or API responses
-- Handle both subreddit-level blocking (entire page) and post-level blocking (individual posts in feeds)
-- Use MutationObserver to catch dynamically loaded content (infinite scroll)
-- Avoid heavy DOM polling; prioritize performance
+- **Subreddit-level:** Checks `data-over18`, `routeisnsfw` attributes, NSFW badges, and page titles
+- **Post-level:** Detects NSFW tags, blur overlays, and data attributes on individual posts
+- **Search results:** Filters NSFW indicators in search dropdown (inside Shadow DOM)
+- **Recent searches:** Checks `data-faceplate-tracking-context` for `"nsfw":true`
+- **Sidebar recent pages:** Tracks visited NSFW subreddits and filters them from sidebar
+
+Implementation details:
+
+- Uses MutationObserver for dynamic content (infinite scroll, SPA navigation)
+- Shadow DOM observers for search dropdown and sidebar (reddit-search-large, reddit-recent-pages)
+- Event-driven architecture (no continuous polling except 50ms intervals for Shadow DOM initialization)
+- Centralized selector constants in `SELECTORS` object for easy maintenance
 
 ### Blanking Behavior
 
@@ -120,3 +131,29 @@ The extension must:
 - Reddit DOM selectors may break with UI changes; use resilient selectors and modular matching logic
 - Handle both old and new Reddit designs where possible
 - Phase 2 will extend to Twitch; keep architecture modular for future domain support
+
+## Current Implementation Status
+
+### Fully Implemented Features
+
+- ✅ Mature subreddit detection and blocking (entire page)
+- ✅ Individual NSFW post detection in feeds (with placeholders)
+- ✅ Search dropdown filtering (18+ section + recent NSFW searches) via Shadow DOM
+- ✅ Sidebar recent pages filtering (removes visited NSFW subreddits)
+- ✅ SPA navigation detection (re-initializes filters on page changes)
+- ✅ In-memory tracking of blocked subreddits
+- ✅ Production-ready code (optimized, documented, tested)
+
+### Known Limitations
+
+- Blocked subreddit list is in-memory only (resets on page reload)
+- No user settings/preferences yet (all blocking enabled by default)
+- No persistence across sessions (will be added with chrome.storage)
+
+### Next Steps
+
+See `todo.md` for full roadmap. High priority items:
+
+- Settings UI with blocking style options (placeholder/remove/quotes/blur)
+- chrome.storage.sync for persistent settings
+- Enable/disable toggle in popup

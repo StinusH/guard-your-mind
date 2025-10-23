@@ -68,12 +68,17 @@ const SELECTORS = {
 
   // Shadow DOM selectors
   shadowDOM: {
-    host: "reddit-search-large",
+    searchHost: "reddit-search-large",
+    sidebarHost: "reddit-recent-pages",
     nsfwSection: "faceplate-expandable-section-helper#nsfw_typeahead_section",
     recentSearchItem: "faceplate-tracker[data-faceplate-tracking-context]",
+    sidebarRecentItem: "li[role='presentation'] a[href^='/r/']",
     cssId: "gym-hide-nsfw-search",
   },
 };
+
+// Track blocked subreddits (in-memory only, resets on page reload)
+const blockedSubreddits = new Set<string>();
 
 // Logging utility
 function log(...args: unknown[]): void {
@@ -84,11 +89,13 @@ function log(...args: unknown[]): void {
 
 /**
  * Detects if current page is a mature subreddit
+ * Also tracks blocked subreddits for sidebar filtering
  */
 function isMatureSubreddit(): boolean {
   // Check for over18 attribute on body
   const body = document.body;
   if (body?.dataset.over18 === "true" || body?.dataset.isOver18 === "true") {
+    trackCurrentSubreddit();
     return true;
   }
 
@@ -98,21 +105,36 @@ function isMatureSubreddit(): boolean {
     shredditApp?.getAttribute("over18") === "true" ||
     shredditApp?.getAttribute("routeisnsfw") === "true"
   ) {
+    trackCurrentSubreddit();
     return true;
   }
 
   // Check for NSFW indicator in subreddit header
   if (document.querySelector(SELECTORS.mature.subreddit.badges)) {
+    trackCurrentSubreddit();
     return true;
   }
 
   // Check page title
   const pageTitle = document.title.toLowerCase();
   if (pageTitle.includes("nsfw") || pageTitle.includes("18+")) {
+    trackCurrentSubreddit();
     return true;
   }
 
   return false;
+}
+
+/**
+ * Tracks the current subreddit as blocked if we're on a subreddit page
+ */
+function trackCurrentSubreddit(): void {
+  const match = location.pathname.match(/^\/r\/([^/]+)/);
+  if (match) {
+    const subreddit = match[1].toLowerCase();
+    blockedSubreddits.add(subreddit);
+    log(`Tracked blocked subreddit: ${subreddit}`);
+  }
 }
 
 /**
@@ -361,7 +383,7 @@ function setupObserver(): void {
  * This ensures the section never flashes on screen before JS can replace it
  */
 function injectHidingCSS(): void {
-  const searchElement = document.querySelector(SELECTORS.shadowDOM.host);
+  const searchElement = document.querySelector(SELECTORS.shadowDOM.searchHost);
   if (searchElement && searchElement.shadowRoot) {
     // Check if we already injected the CSS to avoid duplicates
     if (searchElement.shadowRoot.querySelector(`#${SELECTORS.shadowDOM.cssId}`)) {
@@ -502,7 +524,7 @@ function setupShadowObserver(shadowRoot: ShadowRoot): void {
  * Waits for shadowRoot to be ready if not yet available
  */
 function observeShadowDOM(): void {
-  const searchElement = document.querySelector(SELECTORS.shadowDOM.host);
+  const searchElement = document.querySelector(SELECTORS.shadowDOM.searchHost);
   if (!searchElement) {
     return;
   }
@@ -521,15 +543,77 @@ function observeShadowDOM(): void {
 }
 
 /**
+ * Filters NSFW subreddits from sidebar recent pages
+ */
+function filterSidebarRecentPages(shadowRoot: ShadowRoot): void {
+  const recentLinks = shadowRoot.querySelectorAll(SELECTORS.shadowDOM.sidebarRecentItem);
+
+  recentLinks.forEach((link) => {
+    const href = link.getAttribute("href");
+    if (!href) return;
+
+    const match = href.match(/^\/r\/([^/]+)/);
+    if (match) {
+      const subreddit = match[1].toLowerCase();
+      if (blockedSubreddits.has(subreddit)) {
+        const listItem = link.closest("li");
+        if (listItem && !listItem.classList.contains(CONFIG.blankedClass)) {
+          listItem.classList.add(CONFIG.blankedClass);
+          listItem.remove();
+          log(`Removed ${subreddit} from sidebar recent pages`);
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Sets up observer for sidebar Shadow DOM
+ */
+function observeSidebarDOM(): void {
+  const sidebarElement = document.querySelector(SELECTORS.shadowDOM.sidebarHost);
+  if (!sidebarElement || !sidebarElement.shadowRoot) {
+    return;
+  }
+
+  // Filter existing items
+  filterSidebarRecentPages(sidebarElement.shadowRoot);
+
+  // Watch for changes
+  const sidebarObserver = new MutationObserver(() => {
+    if (sidebarElement.shadowRoot) {
+      filterSidebarRecentPages(sidebarElement.shadowRoot);
+    }
+  });
+
+  sidebarObserver.observe(sidebarElement.shadowRoot, {
+    childList: true,
+    subtree: true,
+  });
+
+  log("Sidebar Shadow DOM observer initialized");
+}
+
+/**
  * Watches for reddit-search-large element to appear and sets up Shadow DOM observer
  * Handles both immediate and delayed appearance of the search element
  */
 function setupShadowDOMWatcher(): void {
-  // Check if element already exists
-  const existingElement = document.querySelector(SELECTORS.shadowDOM.host);
-  if (existingElement) {
+  // Check if search element already exists
+  const existingSearchElement = document.querySelector(SELECTORS.shadowDOM.searchHost);
+  if (existingSearchElement) {
     injectHidingCSS();
     observeShadowDOM();
+  }
+
+  // Check if sidebar element already exists
+  const existingSidebarElement = document.querySelector(SELECTORS.shadowDOM.sidebarHost);
+  if (existingSidebarElement) {
+    observeSidebarDOM();
+  }
+
+  // If both exist, we're done
+  if (existingSearchElement && existingSidebarElement) {
     return;
   }
 
@@ -548,12 +632,22 @@ function setupShadowDOMWatcher(): void {
     return;
   }
 
-  // Wait for reddit-search-large to appear
+  // Wait for Shadow DOM elements to appear
   const mainObserver = new MutationObserver(() => {
-    const searchElement = document.querySelector(SELECTORS.shadowDOM.host);
-    if (searchElement) {
+    const searchElement = document.querySelector(SELECTORS.shadowDOM.searchHost);
+    const sidebarElement = document.querySelector(SELECTORS.shadowDOM.sidebarHost);
+
+    if (searchElement && !existingSearchElement) {
       injectHidingCSS();
       observeShadowDOM();
+    }
+
+    if (sidebarElement && !existingSidebarElement) {
+      observeSidebarDOM();
+    }
+
+    // Disconnect if both are found
+    if (searchElement && sidebarElement) {
       mainObserver.disconnect();
     }
   });
