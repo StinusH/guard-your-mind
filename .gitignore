@@ -1,0 +1,12 @@
+# Node
+node_modules/
+
+# Build outputs
+dist/
+.vite/
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+*.log
