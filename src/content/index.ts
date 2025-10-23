@@ -76,7 +76,6 @@ const SELECTORS = {
 };
 
 // Logging utility
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function log(...args: unknown[]): void {
   if (CONFIG.debugMode) {
     console.log("[Guard Your Mind]", ...args);
@@ -587,6 +586,23 @@ function init(): void {
   // Process again on full page load to catch any dynamically loaded content
   window.addEventListener("load", () => {
     processPage();
+  });
+
+  // Watch for SPA navigation (Reddit is a single-page app)
+  // When URL changes, the search element might be recreated
+  let lastUrl = location.href;
+  new MutationObserver(() => {
+    const currentUrl = location.href;
+    if (currentUrl !== lastUrl) {
+      lastUrl = currentUrl;
+      log("URL changed, re-initializing Shadow DOM watcher");
+      // Re-setup Shadow DOM watcher after navigation
+      setupShadowDOMWatcher();
+      processPage();
+    }
+  }).observe(document, {
+    subtree: true,
+    childList: true,
   });
 }
 
