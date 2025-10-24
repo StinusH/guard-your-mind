@@ -17,6 +17,9 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
 const STORAGE_KEY = "guardYourMind.settings";
 const BLOCKED_SUBS_KEY = "guardYourMind.blockedSubreddits";
 
+/**
+ * Domains that should be considered adult content even if Reddit does not flag them.
+ */
 export const ALWAYS_BLOCKED_DOMAINS = new Set(
   ["redgifs.com"].map((domain) => domain.toLowerCase()),
 );
@@ -26,6 +29,10 @@ const storageAreaName: chrome.storage.AreaName =
   chrome.storage?.sync && storageArea === chrome.storage.sync ? "sync" : "local";
 const blockedStorageArea: chrome.storage.StorageArea = chrome.storage.local;
 
+/**
+ * Normalizes a subreddit name into lowercase without the `r/` prefix.
+ * Returns null when the supplied value does not resemble a subreddit.
+ */
 export const normalizeSubredditName = (value: string | null | undefined): string | null => {
   if (!value) {
     return null;
@@ -51,6 +58,9 @@ export const normalizeSubredditName = (value: string | null | undefined): string
   return trimmed;
 };
 
+/**
+ * Normalizes, deduplicates, and sorts a list of subreddit names.
+ */
 const normalizeSubredditList = (subreddits: string[]): string[] => {
   const normalized = new Set<string>();
   subreddits.forEach((candidate) => {
@@ -117,6 +127,9 @@ export function subscribeToSettings(callback: (settings: ExtensionSettings) => v
   };
 }
 
+/**
+ * Retrieves the blocked-sub list from chrome.storage.local.
+ */
 export async function getBlockedSubreddits(): Promise<string[]> {
   return new Promise((resolve, reject) => {
     blockedStorageArea.get(BLOCKED_SUBS_KEY, (result) => {
@@ -132,6 +145,9 @@ export async function getBlockedSubreddits(): Promise<string[]> {
   });
 }
 
+/**
+ * Writes a blocked-sub list back to storage after normalization.
+ */
 export async function setBlockedSubreddits(subreddits: string[]): Promise<void> {
   const normalized = normalizeSubredditList(subreddits);
   return new Promise((resolve, reject) => {
@@ -146,6 +162,10 @@ export async function setBlockedSubreddits(subreddits: string[]): Promise<void> 
   });
 }
 
+/**
+ * Subscribes to chrome.storage changes for the blocked-sub list.
+ * Returns an unsubscribe function.
+ */
 export function subscribeToBlockedSubreddits(callback: (subreddits: string[]) => void): () => void {
   const listener = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
     if (areaName !== "local") {

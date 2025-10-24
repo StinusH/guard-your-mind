@@ -63,6 +63,9 @@ const hasTruthyAttribute = (element: Element, attributeName: string): boolean =>
   return normalized === "" || normalized === "true" || normalized === attributeName.toLowerCase();
 };
 
+/**
+ * Normalizes a potential hostname, stripping protocols and www.
+ */
 const normalizeHostname = (value: string | null | undefined): string | null => {
   if (!value) {
     return null;
@@ -93,6 +96,9 @@ const normalizeHostname = (value: string | null | undefined): string | null => {
   }
 };
 
+/**
+ * Returns true when the hostname equals or is a subdomain of a hard-coded blocked domain.
+ */
 const matchesAlwaysBlockedDomain = (hostname: string | null): boolean => {
   if (!hostname) {
     return false;
@@ -107,6 +113,9 @@ const matchesAlwaysBlockedDomain = (hostname: string | null): boolean => {
   return false;
 };
 
+/**
+ * Examines an element and its surrounding shreddit-post for hostnames that should always be blocked.
+ */
 const isAlwaysBlockedDomain = (element: Element): boolean => {
   const hostnames = new Set<string>();
 
@@ -298,6 +307,7 @@ subscribeToBlockedSubreddits((storedSubreddits) => {
   incoming.forEach((subreddit) => blockedSubreddits.add(subreddit));
   sidebarFilter.resetState();
   sidebarFilter.triggerRefresh();
+  processPage();
 });
 
 function extractSubredditFromHref(href: string): string | null {
@@ -320,6 +330,12 @@ function extractSubredditFromHref(href: string): string | null {
  */
 function isMatureSubreddit(): boolean {
   const block18Plus = shouldBlock18Plus();
+
+  const manualMatch = location.pathname.match(/^\/r\/([^/]+)/i);
+  const currentSubreddit = manualMatch ? manualMatch[1].toLowerCase() : null;
+  if (currentSubreddit && blockedSubreddits.has(currentSubreddit)) {
+    return true;
+  }
 
   // Check for over18 attribute on body
   const body = document.body;

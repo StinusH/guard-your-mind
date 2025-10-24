@@ -86,20 +86,22 @@ root.innerHTML = `
         <div class="setting-group__header">
           <h2 class="setting-group__title">Blocked subreddits</h2>
           <p class="setting-group__subtitle">
-            Manually add communities to the saved block list when detection misses them.
+            Manually manage the saved block list when detection misses a community.
           </p>
         </div>
         <form class="blocked-form" data-role="blocked-form">
           <input
             class="blocked-form__input"
             type="text"
-            placeholder="Add subreddit (e.g., AiUncensored)"
+            placeholder="Enter subreddit"
             autocomplete="off"
             data-role="blocked-input"
           />
-          <button class="blocked-form__button" type="submit">Add</button>
+          <button class="blocked-form__button blocked-form__button--secondary" type="button" data-role="blocked-paste">Paste current</button>
+          <button class="blocked-form__button" type="submit" data-role="blocked-add">Add</button>
+          <button class="blocked-form__button blocked-form__button--secondary" type="button" data-role="blocked-remove">Remove</button>
+          <span class="blocked-status" data-role="blocked-status"></span>
         </form>
-        <div class="blocked-list" data-role="blocked-list"></div>
       </div>
     </section>
     <section class="popup__section popup__section--style">
@@ -132,8 +134,14 @@ const styleDescription = root.querySelector<HTMLParagraphElement>(
 );
 const blockedForm = root.querySelector<HTMLFormElement>("[data-role='blocked-form']");
 const blockedInput = root.querySelector<HTMLInputElement>("[data-role='blocked-input']");
-const blockedListContainer = root.querySelector<HTMLDivElement>("[data-role='blocked-list']");
-const blockedAddButton = blockedForm?.querySelector<HTMLButtonElement>("button[type='submit']");
+const blockedPasteButton = blockedForm?.querySelector<HTMLButtonElement>(
+  "[data-role='blocked-paste']",
+);
+const blockedAddButton = blockedForm?.querySelector<HTMLButtonElement>("[data-role='blocked-add']");
+const blockedRemoveButton = blockedForm?.querySelector<HTMLButtonElement>(
+  "[data-role='blocked-remove']",
+);
+const blockedStatus = blockedForm?.querySelector<HTMLSpanElement>("[data-role='blocked-status']");
 
 if (
   !togglesContainer ||
@@ -142,8 +150,10 @@ if (
   !styleDescription ||
   !blockedForm ||
   !blockedInput ||
-  !blockedListContainer ||
-  !blockedAddButton
+  !blockedPasteButton ||
+  !blockedAddButton ||
+  !blockedRemoveButton ||
+  !blockedStatus
 ) {
   throw new Error("Guard Your Mind popup layout failed to render.");
 }
@@ -154,8 +164,22 @@ let isSaving = false;
 let statusTimeout: number | undefined;
 let blockedSubredditsState: string[] = [];
 
+/**
+ * Updates the global status banner and the inline blocked-form status indicator.
+ * Messages auto-clear after a short delay.
+ */
 const setStatus = (message: string, variant: "success" | "error" | "neutral" = "neutral") => {
   statusElement.textContent = message;
+  if (blockedStatus) {
+    blockedStatus.textContent = message;
+    if (variant === "success") {
+      blockedStatus.dataset.variant = "success";
+    } else if (variant === "error") {
+      blockedStatus.dataset.variant = "error";
+    } else {
+      delete blockedStatus.dataset.variant;
+    }
+  }
 
   if (variant === "success") {
     statusElement.dataset.variant = "success";
@@ -173,10 +197,18 @@ const setStatus = (message: string, variant: "success" | "error" | "neutral" = "
     statusTimeout = window.setTimeout(() => {
       statusElement.textContent = "";
       delete statusElement.dataset.variant;
+      if (blockedStatus) {
+        blockedStatus.textContent = "";
+        delete blockedStatus.dataset.variant;
+      }
     }, 2500);
   }
 };
 
+/**
+ * Normalizes user subreddit input into a lowercase value without the `r/` prefix.
+ * Returns null when the input does not resemble a subreddit.
+ */
 const normalizeSubredditInput = (value: string): string | null => {
   if (!value) {
     return null;
@@ -202,41 +234,13 @@ const normalizeSubredditInput = (value: string): string | null => {
   return trimmed;
 };
 
+/**
+ * Updates manual-block controls to reflect whether actions are currently saving.
+ */
 const renderBlockedSubreddits = () => {
-  blockedListContainer.innerHTML = "";
-
-  if (!blockedSubredditsState.length) {
-    const emptyState = document.createElement("p");
-    emptyState.className = "blocked-list__empty";
-    emptyState.textContent = "No subreddits saved yet.";
-    blockedListContainer.appendChild(emptyState);
-    return;
+  if (blockedRemoveButton) {
+    blockedRemoveButton.disabled = isSaving;
   }
-
-  const fragment = document.createDocumentFragment();
-
-  blockedSubredditsState.forEach((subreddit) => {
-    const item = document.createElement("div");
-    item.className = "blocked-list__item";
-
-    const name = document.createElement("span");
-    name.className = "blocked-list__name";
-    name.textContent = `r/${subreddit}`;
-
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className = "blocked-list__remove";
-    removeButton.textContent = "Remove";
-    removeButton.disabled = isSaving;
-    removeButton.addEventListener("click", () => {
-      handleBlockedRemove(subreddit);
-    });
-
-    item.append(name, removeButton);
-    fragment.appendChild(item);
-  });
-
-  blockedListContainer.appendChild(fragment);
 };
 
 const updateStyleDescription = (style: BlockingStyle) => {
@@ -260,10 +264,11 @@ const updateInputs = (settings: ExtensionSettings) => {
   updateStyleDescription(settings.blockingStyle);
 
   blockedInput.disabled = isSaving;
+  blockedPasteButton.disabled = isSaving;
   blockedAddButton.disabled = isSaving;
-  blockedListContainer.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
-    button.disabled = isSaving;
-  });
+  if (blockedRemoveButton) {
+    blockedRemoveButton.disabled = isSaving;
+  }
 };
 
 const persistSettings = async (nextSettings: ExtensionSettings, previous: ExtensionSettings) => {
@@ -309,7 +314,14 @@ const handleStyleChange = (value: BlockingStyle) => {
   void persistSettings(nextSettings, previous);
 };
 
-const persistBlockedList = async (nextList: string[], previous: string[]) => {
+/**
+ * Persists the manual blocked-sub list and surfaces feedback to the user.
+ */
+const persistBlockedList = async (
+  nextList: string[],
+  previous: string[],
+  successMessage: string,
+) => {
   isSaving = true;
   updateInputs(currentSettings);
   renderBlockedSubreddits();
@@ -319,7 +331,7 @@ const persistBlockedList = async (nextList: string[], previous: string[]) => {
     await setBlockedSubreddits(nextList);
     blockedSubredditsState = nextList;
     renderBlockedSubreddits();
-    setStatus("Saved", "success");
+    setStatus(successMessage, "success");
   } catch (error) {
     console.error("Failed to update blocked subreddits", error);
     blockedSubredditsState = previous;
@@ -331,18 +343,9 @@ const persistBlockedList = async (nextList: string[], previous: string[]) => {
   }
 };
 
-function handleBlockedRemove(subreddit: string): void {
-  if (!blockedSubredditsState.includes(subreddit) || isSaving) {
-    return;
-  }
-
-  const previous = blockedSubredditsState.slice();
-  const nextList = previous.filter((candidate) => candidate !== subreddit);
-  blockedSubredditsState = nextList;
-  renderBlockedSubreddits();
-  void persistBlockedList(nextList, previous);
-}
-
+/**
+ * Adds a subreddit supplied by the user to the manual block list.
+ */
 const handleBlockedAdd = (rawValue: string): void => {
   if (isSaving) {
     return;
@@ -363,7 +366,7 @@ const handleBlockedAdd = (rawValue: string): void => {
   const nextList = [...blockedSubredditsState, normalized].sort((a, b) => a.localeCompare(b));
   blockedSubredditsState = nextList;
   renderBlockedSubreddits();
-  void persistBlockedList(nextList, previous);
+  void persistBlockedList(nextList, previous, `Blocked r/${normalized}`);
   blockedInput.value = "";
 };
 
@@ -431,6 +434,73 @@ styleSelect.addEventListener("change", (event) => {
 blockedForm.addEventListener("submit", (event) => {
   event.preventDefault();
   handleBlockedAdd(blockedInput.value);
+});
+
+blockedRemoveButton.addEventListener("click", () => {
+  if (isSaving) {
+    return;
+  }
+
+  const normalized = normalizeSubredditInput(blockedInput.value);
+  if (!normalized) {
+    setStatus("Enter a valid subreddit name", "error");
+    return;
+  }
+
+  if (!blockedSubredditsState.includes(normalized)) {
+    setStatus(`r/${normalized} is not in the list`, "neutral");
+    return;
+  }
+
+  const previous = blockedSubredditsState.slice();
+  const nextList = previous.filter((candidate) => candidate !== normalized);
+  blockedSubredditsState = nextList;
+  renderBlockedSubreddits();
+  void persistBlockedList(nextList, previous, `Removed r/${normalized}`);
+  blockedInput.value = "";
+});
+
+blockedPasteButton.addEventListener("click", () => {
+  if (isSaving) {
+    return;
+  }
+
+  void (async () => {
+    const url = await new Promise<string | null>((resolve) => {
+      try {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (chrome.runtime.lastError) {
+            console.error("Guard Your Mind failed to read active tab", chrome.runtime.lastError);
+            resolve(null);
+            return;
+          }
+
+          resolve(tabs?.[0]?.url ?? null);
+        });
+      } catch (error) {
+        console.error("Guard Your Mind failed to query tabs", error);
+        resolve(null);
+      }
+    });
+
+    if (!url) {
+      setStatus("Unable to read the current tab URL", "error");
+      return;
+    }
+
+    const match = url.match(/\/(?:r|user)\/([^/]+)/i);
+    const parsed = match ? normalizeSubredditInput(match[1]) : null;
+
+    if (!parsed) {
+      setStatus("Current tab is not on a subreddit page", "error");
+      return;
+    }
+
+    blockedInput.value = parsed;
+    blockedInput.focus();
+    blockedInput.select();
+    setStatus(`Prepared r/${parsed}`, "neutral");
+  })();
 });
 
 const initializeSettings = async () => {
