@@ -17,6 +17,10 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
 const STORAGE_KEY = "guardYourMind.settings";
 const BLOCKED_SUBS_KEY = "guardYourMind.blockedSubreddits";
 
+export const ALWAYS_BLOCKED_DOMAINS = new Set(
+  ["redgifs.com"].map((domain) => domain.toLowerCase()),
+);
+
 const storageArea: chrome.storage.StorageArea = chrome.storage?.sync ?? chrome.storage.local;
 const storageAreaName: chrome.storage.AreaName =
   chrome.storage?.sync && storageArea === chrome.storage.sync ? "sync" : "local";

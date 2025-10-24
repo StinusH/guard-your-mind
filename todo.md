@@ -20,6 +20,7 @@
 - [x] Remember blocked subreddits across reloads via `chrome.storage.local`.
 - [x] Extract sidebar filtering logic into dedicated module for reuse/testing.
 - [x] Add optional blocking toggle for posts/subreddits tagged 18+ (default on).
+- [x] Enforce default always-blocked domains (e.g., redgifs.com) regardless of Reddit tags.
 
 ## In Progress
 

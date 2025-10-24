@@ -42,8 +42,10 @@ The extension follows Manifest V3 architecture with three main components:
    - Responsible for detecting and blanking mature content
    - Handles both initial page load and dynamic content (infinite scroll via MutationObserver)
    - Manages Shadow DOM filtering for search dropdown and sidebar recent pages (via `src/content/sidebarFilter.ts`)
-   - Tracks visited NSFW subreddits and persists them in `chrome.storage.local` so refreshes retain the blocked list
-   - Detects SPA navigation to persist filtering across page changes
+
+- Tracks visited NSFW subreddits and persists them in `chrome.storage.local` so refreshes retain the blocked list
+- Automatically treats posts from a small allowlist of adult domains (e.g., `redgifs.com`) as blocked content even when Reddit omits NSFW/18+ tags
+  - Detects SPA navigation to persist filtering across page changes
 
 3. **Popup UI** (`src/popup/`)
    - Browser action popup with enable/disable toggle, blocking style dropdown, and counter preference
@@ -97,6 +99,7 @@ Implementation details:
 
 - Use `chrome.storage.sync` when available (falls back to local)
 - Stored settings include: `blockingEnabled`, `blockingStyle`, `showBlockedCounter`, `block18PlusContent`
+- `ALWAYS_BLOCKED_DOMAINS` in `src/shared/settings.ts` defines hard-coded domains that are always blanked
 - Persist blocked subreddit visits to `chrome.storage.local` (`getBlockedSubreddits` / `setBlockedSubreddits`) to keep sidebar filtering consistent across refreshes
 - Content script subscribes to storage changes to react instantly
 - No telemetry or remote logging in Phase 1
