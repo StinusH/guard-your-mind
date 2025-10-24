@@ -5,6 +5,7 @@ import {
   getBlockedSubreddits,
   getSettings,
   setBlockedSubreddits,
+  subscribeToBlockedSubreddits,
   subscribeToSettings,
 } from "../shared/settings";
 import { createSidebarFilter } from "./sidebarFilter";
@@ -273,6 +274,31 @@ void getBlockedSubreddits()
   .catch((error) => {
     console.error("Guard Your Mind failed to load blocked subreddits", error);
   });
+
+subscribeToBlockedSubreddits((storedSubreddits) => {
+  const incoming = new Set(storedSubreddits);
+  let changed = false;
+
+  if (incoming.size !== blockedSubreddits.size) {
+    changed = true;
+  } else {
+    for (const value of incoming) {
+      if (!blockedSubreddits.has(value)) {
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  if (!changed) {
+    return;
+  }
+
+  blockedSubreddits.clear();
+  incoming.forEach((subreddit) => blockedSubreddits.add(subreddit));
+  sidebarFilter.resetState();
+  sidebarFilter.triggerRefresh();
+});
 
 function extractSubredditFromHref(href: string): string | null {
   const match = href.match(/\/r\/([^/?#]+)/i);

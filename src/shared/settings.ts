@@ -26,6 +26,42 @@ const storageAreaName: chrome.storage.AreaName =
   chrome.storage?.sync && storageArea === chrome.storage.sync ? "sync" : "local";
 const blockedStorageArea: chrome.storage.StorageArea = chrome.storage.local;
 
+export const normalizeSubredditName = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  let trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("/r/")) {
+    trimmed = trimmed.slice(3);
+  } else if (trimmed.startsWith("r/")) {
+    trimmed = trimmed.slice(2);
+  }
+
+  trimmed = trimmed.toLowerCase();
+
+  if (!/^[a-z0-9_]{2,21}$/.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+};
+
+const normalizeSubredditList = (subreddits: string[]): string[] => {
+  const normalized = new Set<string>();
+  subreddits.forEach((candidate) => {
+    const value = normalizeSubredditName(candidate);
+    if (value) {
+      normalized.add(value);
+    }
+  });
+  return Array.from(normalized).sort((a, b) => a.localeCompare(b));
+};
+
 export async function getSettings(): Promise<ExtensionSettings> {
   return new Promise((resolve, reject) => {
     storageArea.get(STORAGE_KEY, (result) => {
@@ -90,20 +126,16 @@ export async function getBlockedSubreddits(): Promise<string[]> {
         return;
       }
 
-      const stored = result[BLOCKED_SUBS_KEY] as string[] | undefined;
-      if (!stored || stored.length === 0) {
-        resolve([]);
-        return;
-      }
-
-      resolve(stored.map((subreddit) => subreddit.toLowerCase()));
+      const stored = (result[BLOCKED_SUBS_KEY] as string[] | undefined) ?? [];
+      resolve(normalizeSubredditList(stored));
     });
   });
 }
 
 export async function setBlockedSubreddits(subreddits: string[]): Promise<void> {
+  const normalized = normalizeSubredditList(subreddits);
   return new Promise((resolve, reject) => {
-    blockedStorageArea.set({ [BLOCKED_SUBS_KEY]: subreddits }, () => {
+    blockedStorageArea.set({ [BLOCKED_SUBS_KEY]: normalized }, () => {
       const error = chrome.runtime.lastError;
       if (error) {
         reject(new Error(error.message));
@@ -112,4 +144,20 @@ export async function setBlockedSubreddits(subreddits: string[]): Promise<void> 
       resolve();
     });
   });
+}
+
+export function subscribeToBlockedSubreddits(callback: (subreddits: string[]) => void): () => void {
+  const listener = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
+    if (areaName !== "local") {
+      return;
+    }
+
+    if (BLOCKED_SUBS_KEY in changes) {
+      const next = (changes[BLOCKED_SUBS_KEY].newValue as string[] | undefined) ?? [];
+      callback(normalizeSubredditList(next));
+    }
+  };
+
+  chrome.storage.onChanged.addListener(listener);
+  return () => chrome.storage.onChanged.removeListener(listener);
 }

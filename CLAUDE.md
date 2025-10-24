@@ -45,6 +45,7 @@ The extension follows Manifest V3 architecture with three main components:
 
 - Tracks visited NSFW subreddits and persists them in `chrome.storage.local` so refreshes retain the blocked list
 - Automatically treats posts from a small allowlist of adult domains (e.g., `redgifs.com`) as blocked content even when Reddit omits NSFW/18+ tags
+- Popup allows users to manage the saved blocked-sub list manually (add/remove communities) which feeds into the same storage source
   - Detects SPA navigation to persist filtering across page changes
 
 3. **Popup UI** (`src/popup/`)
@@ -100,6 +101,7 @@ Implementation details:
 - Use `chrome.storage.sync` when available (falls back to local)
 - Stored settings include: `blockingEnabled`, `blockingStyle`, `showBlockedCounter`, `block18PlusContent`
 - `ALWAYS_BLOCKED_DOMAINS` in `src/shared/settings.ts` defines hard-coded domains that are always blanked
+- `subscribeToBlockedSubreddits` exposes storage updates for the manual/auto blocked list
 - Persist blocked subreddit visits to `chrome.storage.local` (`getBlockedSubreddits` / `setBlockedSubreddits`) to keep sidebar filtering consistent across refreshes
 - Content script subscribes to storage changes to react instantly
 - No telemetry or remote logging in Phase 1

@@ -24,6 +24,7 @@
 - Stored properties: `blockingEnabled`, `blockingStyle` (`placeholder | remove | quotes | blur`), `showBlockedCounter`, and `block18PlusContent`.
 - Content script should react to `blockingStyle` changes by adjusting blanking behavior (blur, quotes, remove) rather than duplicating state.
 - Visited NSFW subreddits are persisted via `getBlockedSubreddits` / `setBlockedSubreddits`, which write to `chrome.storage.local` so the blocked list survives refreshes.
+- Manually blocked subreddits can be managed from the popup (adds/removes persist to the same storage key and broadcast via `subscribeToBlockedSubreddits`).
 - A default allowlist of known adult domains (e.g., `redgifs.com`) is enforced via `ALWAYS_BLOCKED_DOMAINS` in `src/shared/settings.ts`; posts from these hosts are blocked even without explicit NSFW tags.
 - When adding new preferences, extend the shared type and ensure backwards compatibility with older stored keys.
 

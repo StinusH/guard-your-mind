@@ -2,8 +2,11 @@ import "./style.css";
 import type { BlockingStyle, ExtensionSettings } from "../shared/settings";
 import {
   DEFAULT_SETTINGS,
+  getBlockedSubreddits,
   getSettings,
+  setBlockedSubreddits,
   setSettings,
+  subscribeToBlockedSubreddits,
   subscribeToSettings,
 } from "../shared/settings";
 
@@ -78,6 +81,27 @@ root.innerHTML = `
       <p class="popup__subtitle">Choose how mature Reddit content is handled.</p>
     </header>
     <section class="popup__section" data-role="toggles"></section>
+    <section class="popup__section popup__section--blocked">
+      <div class="setting-group">
+        <div class="setting-group__header">
+          <h2 class="setting-group__title">Blocked subreddits</h2>
+          <p class="setting-group__subtitle">
+            Manually add communities to the saved block list when detection misses them.
+          </p>
+        </div>
+        <form class="blocked-form" data-role="blocked-form">
+          <input
+            class="blocked-form__input"
+            type="text"
+            placeholder="Add subreddit (e.g., AiUncensored)"
+            autocomplete="off"
+            data-role="blocked-input"
+          />
+          <button class="blocked-form__button" type="submit">Add</button>
+        </form>
+        <div class="blocked-list" data-role="blocked-list"></div>
+      </div>
+    </section>
     <section class="popup__section popup__section--style">
       <div class="setting-group">
         <div class="setting-group__header">
@@ -106,8 +130,21 @@ const styleSelect = root.querySelector<HTMLSelectElement>("[data-role='blocking-
 const styleDescription = root.querySelector<HTMLParagraphElement>(
   "[data-role='style-description']",
 );
+const blockedForm = root.querySelector<HTMLFormElement>("[data-role='blocked-form']");
+const blockedInput = root.querySelector<HTMLInputElement>("[data-role='blocked-input']");
+const blockedListContainer = root.querySelector<HTMLDivElement>("[data-role='blocked-list']");
+const blockedAddButton = blockedForm?.querySelector<HTMLButtonElement>("button[type='submit']");
 
-if (!togglesContainer || !statusElement || !styleSelect || !styleDescription) {
+if (
+  !togglesContainer ||
+  !statusElement ||
+  !styleSelect ||
+  !styleDescription ||
+  !blockedForm ||
+  !blockedInput ||
+  !blockedListContainer ||
+  !blockedAddButton
+) {
   throw new Error("Guard Your Mind popup layout failed to render.");
 }
 
@@ -115,6 +152,7 @@ const toggleInputs = new Map<ToggleSettingKey, HTMLInputElement>();
 let currentSettings: ExtensionSettings = DEFAULT_SETTINGS;
 let isSaving = false;
 let statusTimeout: number | undefined;
+let blockedSubredditsState: string[] = [];
 
 const setStatus = (message: string, variant: "success" | "error" | "neutral" = "neutral") => {
   statusElement.textContent = message;
@@ -139,6 +177,68 @@ const setStatus = (message: string, variant: "success" | "error" | "neutral" = "
   }
 };
 
+const normalizeSubredditInput = (value: string): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  let trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("/r/")) {
+    trimmed = trimmed.slice(3);
+  } else if (trimmed.startsWith("r/")) {
+    trimmed = trimmed.slice(2);
+  }
+
+  trimmed = trimmed.toLowerCase();
+
+  if (!/^[a-z0-9_]{2,21}$/.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+};
+
+const renderBlockedSubreddits = () => {
+  blockedListContainer.innerHTML = "";
+
+  if (!blockedSubredditsState.length) {
+    const emptyState = document.createElement("p");
+    emptyState.className = "blocked-list__empty";
+    emptyState.textContent = "No subreddits saved yet.";
+    blockedListContainer.appendChild(emptyState);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  blockedSubredditsState.forEach((subreddit) => {
+    const item = document.createElement("div");
+    item.className = "blocked-list__item";
+
+    const name = document.createElement("span");
+    name.className = "blocked-list__name";
+    name.textContent = `r/${subreddit}`;
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "blocked-list__remove";
+    removeButton.textContent = "Remove";
+    removeButton.disabled = isSaving;
+    removeButton.addEventListener("click", () => {
+      handleBlockedRemove(subreddit);
+    });
+
+    item.append(name, removeButton);
+    fragment.appendChild(item);
+  });
+
+  blockedListContainer.appendChild(fragment);
+};
+
 const updateStyleDescription = (style: BlockingStyle) => {
   const option = BLOCKING_STYLE_OPTIONS.find((candidate) => candidate.value === style);
   styleDescription.textContent = option ? option.description : "";
@@ -158,6 +258,12 @@ const updateInputs = (settings: ExtensionSettings) => {
   styleSelect.value = settings.blockingStyle;
   styleSelect.disabled = !settings.blockingEnabled || isSaving;
   updateStyleDescription(settings.blockingStyle);
+
+  blockedInput.disabled = isSaving;
+  blockedAddButton.disabled = isSaving;
+  blockedListContainer.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
+    button.disabled = isSaving;
+  });
 };
 
 const persistSettings = async (nextSettings: ExtensionSettings, previous: ExtensionSettings) => {
@@ -203,6 +309,64 @@ const handleStyleChange = (value: BlockingStyle) => {
   void persistSettings(nextSettings, previous);
 };
 
+const persistBlockedList = async (nextList: string[], previous: string[]) => {
+  isSaving = true;
+  updateInputs(currentSettings);
+  renderBlockedSubreddits();
+  setStatus("Saving…");
+
+  try {
+    await setBlockedSubreddits(nextList);
+    blockedSubredditsState = nextList;
+    renderBlockedSubreddits();
+    setStatus("Saved", "success");
+  } catch (error) {
+    console.error("Failed to update blocked subreddits", error);
+    blockedSubredditsState = previous;
+    renderBlockedSubreddits();
+    setStatus("Failed to update list", "error");
+  } finally {
+    isSaving = false;
+    updateInputs(currentSettings);
+  }
+};
+
+function handleBlockedRemove(subreddit: string): void {
+  if (!blockedSubredditsState.includes(subreddit) || isSaving) {
+    return;
+  }
+
+  const previous = blockedSubredditsState.slice();
+  const nextList = previous.filter((candidate) => candidate !== subreddit);
+  blockedSubredditsState = nextList;
+  renderBlockedSubreddits();
+  void persistBlockedList(nextList, previous);
+}
+
+const handleBlockedAdd = (rawValue: string): void => {
+  if (isSaving) {
+    return;
+  }
+
+  const normalized = normalizeSubredditInput(rawValue);
+  if (!normalized) {
+    setStatus("Enter a valid subreddit name", "error");
+    return;
+  }
+
+  if (blockedSubredditsState.includes(normalized)) {
+    setStatus(`r/${normalized} is already blocked`, "neutral");
+    return;
+  }
+
+  const previous = blockedSubredditsState.slice();
+  const nextList = [...blockedSubredditsState, normalized].sort((a, b) => a.localeCompare(b));
+  blockedSubredditsState = nextList;
+  renderBlockedSubreddits();
+  void persistBlockedList(nextList, previous);
+  blockedInput.value = "";
+};
+
 const createToggle = (field: ToggleSettingField): HTMLLabelElement => {
   const wrapper = document.createElement("label");
   wrapper.className = "setting-toggle";
@@ -243,6 +407,8 @@ const createToggle = (field: ToggleSettingField): HTMLLabelElement => {
   return wrapper;
 };
 
+renderBlockedSubreddits();
+
 // Populate toggle settings
 TOGGLE_FIELDS.forEach((field) => {
   const toggle = createToggle(field);
@@ -262,15 +428,23 @@ styleSelect.addEventListener("change", (event) => {
   handleStyleChange(target.value as BlockingStyle);
 });
 
+blockedForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  handleBlockedAdd(blockedInput.value);
+});
+
 const initializeSettings = async () => {
   setStatus("Loading…");
   try {
-    const settings = await getSettings();
+    const [settings, blocked] = await Promise.all([getSettings(), getBlockedSubreddits()]);
+
     currentSettings = settings;
+    blockedSubredditsState = blocked;
     updateInputs(settings);
+    renderBlockedSubreddits();
     setStatus("");
   } catch (error) {
-    console.error("Failed to load Guard Your Mind settings", error);
+    console.error("Failed to load Guard Your Mind data", error);
     setStatus("Unable to load settings", "error");
   }
 };
@@ -281,3 +455,9 @@ subscribeToSettings((settings) => {
 });
 
 void initializeSettings();
+
+subscribeToBlockedSubreddits((subreddits) => {
+  blockedSubredditsState = subreddits.slice().sort((a, b) => a.localeCompare(b));
+  renderBlockedSubreddits();
+  updateInputs(currentSettings);
+});
