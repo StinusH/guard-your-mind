@@ -6,6 +6,8 @@
 - [x] Initialize npm project and configure Vite + TypeScript bundling.
 - [x] Configure linting (ESLint) and formatting (Prettier).
 - [x] Hook ESLint/Prettier into Husky pre-commit via lint-staged.
+- [x] Build popup settings UI (blocking toggle, style dropdown, counter toggle).
+- [x] Implement basic local storage state management (extension settings in chrome.storage).
 - [x] Implement Reddit domain matching and early content script injection.
 - [x] Prototype mature subreddit detection (page-level flag, CSS class/JSON data inspection).
 - [x] Implement DOM blanking for subreddit listing pages; verify consistent spacing.
@@ -18,17 +20,12 @@
 
 ## In Progress
 
-- [ ] Add user popup with enable/disable toggle and blocked counter.
-- [ ] Implement basic local storage state management.
+- [ ] Surface live blocked counter in popup.
 
 ## User Settings & Customization (High Priority)
 
-- [ ] Create settings page/popup UI with the following options:
-  - **Blocking Styles**: Allow users to choose how content is blocked:
-    - `placeholder` (current default): Gray box with "Content Blocked" message
-    - `remove`: Completely remove the element from DOM
-    - `quotes`: Replace with inspirational/motivational quotes
-    - `blur`: Blur the content with semi-transparent overlay (still visible but obscured)
+- [ ] Expand settings UI with additional customization:
+  - **Blocking Styles**: Implement visual polish for each style (quotes variations, blur overlay customization).
   - **Toggle by content type**: Enable/disable blocking for:
     - Mature subreddits (entire page)
     - Individual NSFW posts in feeds

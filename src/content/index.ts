@@ -1,15 +1,33 @@
+import type { BlockingStyle, ExtensionSettings } from "../shared/settings";
+import { DEFAULT_SETTINGS, getSettings, subscribeToSettings } from "../shared/settings";
+import { createSidebarFilter } from "./sidebarFilter";
+
 /**
  * Guard Your Mind - Content Script
  * Detects and blanks mature (18+) content on Reddit
  */
 
 // Configuration
-// TODO: Future enhancement - load these from user settings in chrome.storage
 const CONFIG = {
-  debugMode: false, // Set to true for debugging
+  debugMode: false, // Toggle manually when deep debugging is required
   blankedClass: "gym-blanked",
   placeholderClass: "gym-placeholder",
-  // Future: Add blockingStyle: 'placeholder' | 'remove' | 'quotes' | 'blur'
+  blurredClass: "gym-blurred",
+};
+
+let extensionSettings: ExtensionSettings = DEFAULT_SETTINGS;
+let observersInitialized = false;
+
+const isBlockingEnabled = (): boolean => extensionSettings.blockingEnabled;
+const getBlockingStyle = (): BlockingStyle => extensionSettings.blockingStyle ?? "placeholder";
+
+const ensureInitialized = (): void => {
+  if (observersInitialized || !isBlockingEnabled()) {
+    return;
+  }
+
+  init();
+  observersInitialized = true;
 };
 
 // CSS Selectors for different Reddit UI elements
@@ -72,7 +90,8 @@ const SELECTORS = {
     sidebarHost: "reddit-recent-pages",
     nsfwSection: "faceplate-expandable-section-helper#nsfw_typeahead_section",
     recentSearchItem: "faceplate-tracker[data-faceplate-tracking-context]",
-    sidebarRecentItem: "li[role='presentation'] a[href^='/r/']",
+    sidebarRecentItem: "li[role='presentation']",
+    sidebarRecentLink: "a[href*='/r/']",
     cssId: "gym-hide-nsfw-search",
   },
 };
@@ -87,6 +106,40 @@ function log(...args: unknown[]): void {
   }
 }
 
+const sidebarFilter = createSidebarFilter({
+  config: {
+    blankedClass: CONFIG.blankedClass,
+    placeholderClass: CONFIG.placeholderClass,
+  },
+  selectors: {
+    shadowDOM: {
+      sidebarRecentItem: SELECTORS.shadowDOM.sidebarRecentItem,
+      sidebarRecentLink: SELECTORS.shadowDOM.sidebarRecentLink,
+      sidebarHost: SELECTORS.shadowDOM.sidebarHost,
+    },
+  },
+  blockedSubreddits,
+  isBlockingEnabled,
+  extractSubredditFromHref,
+  createSidebarPlaceholder,
+  isDebugEnabled: () => CONFIG.debugMode,
+  log,
+});
+
+function extractSubredditFromHref(href: string): string | null {
+  const match = href.match(/\/r\/([^/?#]+)/i);
+  if (!match) {
+    return null;
+  }
+
+  const raw = match[1];
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 /**
  * Detects if current page is a mature subreddit
  * Also tracks blocked subreddits for sidebar filtering
@@ -95,7 +148,7 @@ function isMatureSubreddit(): boolean {
   // Check for over18 attribute on body
   const body = document.body;
   if (body?.dataset.over18 === "true" || body?.dataset.isOver18 === "true") {
-    trackCurrentSubreddit();
+    trackCurrentSubreddit("body dataset flag");
     return true;
   }
 
@@ -105,20 +158,20 @@ function isMatureSubreddit(): boolean {
     shredditApp?.getAttribute("over18") === "true" ||
     shredditApp?.getAttribute("routeisnsfw") === "true"
   ) {
-    trackCurrentSubreddit();
+    trackCurrentSubreddit("shreddit-app attributes");
     return true;
   }
 
   // Check for NSFW indicator in subreddit header
   if (document.querySelector(SELECTORS.mature.subreddit.badges)) {
-    trackCurrentSubreddit();
+    trackCurrentSubreddit("subreddit header badge");
     return true;
   }
 
   // Check page title
   const pageTitle = document.title.toLowerCase();
   if (pageTitle.includes("nsfw") || pageTitle.includes("18+")) {
-    trackCurrentSubreddit();
+    trackCurrentSubreddit("page title hint");
     return true;
   }
 
@@ -127,13 +180,29 @@ function isMatureSubreddit(): boolean {
 
 /**
  * Tracks the current subreddit as blocked if we're on a subreddit page
+ * Triggers sidebar filtering to block it from recent pages
  */
-function trackCurrentSubreddit(): void {
+function trackCurrentSubreddit(reason: string): void {
   const match = location.pathname.match(/^\/r\/([^/]+)/);
   if (match) {
     const subreddit = match[1].toLowerCase();
+    const wasNew = !blockedSubreddits.has(subreddit);
     blockedSubreddits.add(subreddit);
-    log(`Tracked blocked subreddit: ${subreddit}`);
+
+    if (wasNew) {
+      log(
+        `Tracked new blocked subreddit "${subreddit}" via ${reason}. Full blocked set: ${Array.from(blockedSubreddits).join(", ")}`,
+      );
+      sidebarFilter.resetState();
+      sidebarFilter.triggerRefresh();
+    } else {
+      log(`Subreddit "${subreddit}" already tracked (triggered by ${reason}).`);
+      sidebarFilter.triggerRefresh();
+    }
+  } else {
+    log(
+      `trackCurrentSubreddit invoked via ${reason} but no subreddit matched in location.pathname "${location.pathname}"`,
+    );
   }
 }
 
@@ -222,12 +291,6 @@ function isMatureSearchResult(element: Element): boolean {
 /**
  * Creates a placeholder element to replace blanked content
  * Matches the original element's dimensions and applies consistent styling
- *
- * TODO: Future enhancement - support multiple blocking styles:
- * - 'placeholder' (current): Gray box with "Content Blocked" message
- * - 'remove': Completely remove the element
- * - 'quotes': Show inspirational quotes instead
- * - 'blur': Blur the content with overlay
  */
 function createPlaceholder(originalElement: Element): HTMLDivElement {
   const placeholder = document.createElement("div");
@@ -262,19 +325,131 @@ function createPlaceholder(originalElement: Element): HTMLDivElement {
   return placeholder;
 }
 
+const QUOTES = [
+  "Small habits today shape who you become tomorrow.",
+  "You get stronger every time you choose what uplifts you.",
+  "Guard your focus and your focus will guard your goals.",
+  "Discipline is doing what matters even when it’s hard.",
+  "Feed the mind with purpose, not distraction.",
+];
+
+let quoteIndex = 0;
+
+const getNextQuote = (): string => {
+  const quote = QUOTES[quoteIndex % QUOTES.length];
+  quoteIndex += 1;
+  return quote;
+};
+
+function createQuotePlaceholder(originalElement: Element): HTMLDivElement {
+  const placeholder = createPlaceholder(originalElement);
+  placeholder.innerHTML = `
+    <div style="text-align: center; padding: 20px; display: flex; flex-direction: column; gap: 8px;">
+      <div style="font-weight: 500; font-size: 13px; opacity: 0.8;">Guard Your Mind</div>
+      <div style="font-size: 14px; line-height: 1.4;">“${getNextQuote()}”</div>
+    </div>
+  `;
+  return placeholder;
+}
+
+let blurStylesInjected = false;
+
+function ensureBlurStylesInjected(): void {
+  if (blurStylesInjected) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.textContent = `
+    .${CONFIG.blurredClass} {
+      position: relative !important;
+      filter: blur(6px) saturate(0.4);
+      border-radius: inherit;
+      overflow: hidden;
+    }
+
+    .${CONFIG.blurredClass}::after {
+      content: "Blurred by Guard Your Mind";
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(17, 24, 39, 0.55);
+      color: #f9fafb;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+      padding: 16px;
+      pointer-events: none;
+    }
+  `;
+
+  const target = document.head ?? document.documentElement ?? document.body;
+  if (target) {
+    target.appendChild(style);
+    blurStylesInjected = true;
+  }
+}
+
+type PlaceholderFactory = (original: Element, style: BlockingStyle) => Element;
+
+function blurElement(element: Element): void {
+  ensureBlurStylesInjected();
+  const target = element as HTMLElement;
+  target.classList.add(CONFIG.blankedClass, CONFIG.blurredClass);
+}
+
+function clearBlurredElements(): void {
+  document.querySelectorAll(`.${CONFIG.blurredClass}`).forEach((element) => {
+    element.classList.remove(CONFIG.blurredClass);
+    element.classList.remove(CONFIG.blankedClass);
+  });
+}
+
+function applyBlockingToElement(element: Element, factory?: PlaceholderFactory): void {
+  const style = getBlockingStyle();
+
+  switch (style) {
+    case "remove": {
+      element.remove();
+      break;
+    }
+    case "blur": {
+      blurElement(element);
+      break;
+    }
+    case "quotes": {
+      const placeholder = factory ? factory(element, style) : createQuotePlaceholder(element);
+      placeholder.classList.add(CONFIG.blankedClass);
+      element.replaceWith(placeholder);
+      break;
+    }
+    case "placeholder":
+    default: {
+      const placeholder = factory ? factory(element, style) : createPlaceholder(element);
+      placeholder.classList.add(CONFIG.blankedClass);
+      element.replaceWith(placeholder);
+      break;
+    }
+  }
+}
+
 /**
  * Blanks a single element by replacing it with a placeholder
  * Prevents double-processing by checking for the blanked class
  */
 function blankElement(element: Element): void {
+  if (!isBlockingEnabled()) {
+    return;
+  }
+
   // Avoid blanking the same element multiple times
   if (element.classList.contains(CONFIG.blankedClass)) {
     return;
   }
 
-  const placeholder = createPlaceholder(element);
-  placeholder.classList.add(CONFIG.blankedClass);
-  element.replaceWith(placeholder);
+  applyBlockingToElement(element);
 }
 
 /**
@@ -309,6 +484,10 @@ function blankMaturePosts(): void {
  * Note: The NSFW section in the search dropdown is handled separately via Shadow DOM
  */
 function filterSearchResults(): void {
+  if (!isBlockingEnabled()) {
+    return;
+  }
+
   SELECTORS.containers.searchResults.forEach((selector) => {
     const results = document.querySelectorAll(selector);
 
@@ -316,8 +495,7 @@ function filterSearchResults(): void {
       if (isMatureSearchResult(result) && !result.classList.contains(CONFIG.blankedClass)) {
         // Mark as blanked to avoid processing multiple times
         result.classList.add(CONFIG.blankedClass);
-        // Remove entirely from DOM
-        result.remove();
+        applyBlockingToElement(result);
       }
     });
   });
@@ -327,6 +505,10 @@ function filterSearchResults(): void {
  * Main processing function
  */
 function processPage(): void {
+  if (!isBlockingEnabled()) {
+    return;
+  }
+
   // Always filter search results first
   filterSearchResults();
 
@@ -345,6 +527,10 @@ function processPage(): void {
  */
 function setupObserver(): void {
   const observer = new MutationObserver((mutations) => {
+    if (!isBlockingEnabled()) {
+      return;
+    }
+
     // Check if any mutations involve search results outside Shadow DOM
     const hasSearchResults = mutations.some((mutation) => {
       return Array.from(mutation.addedNodes).some((node) => {
@@ -383,6 +569,10 @@ function setupObserver(): void {
  * This ensures the section never flashes on screen before JS can replace it
  */
 function injectHidingCSS(): void {
+  if (!isBlockingEnabled()) {
+    return;
+  }
+
   const searchElement = document.querySelector(SELECTORS.shadowDOM.searchHost);
   if (searchElement && searchElement.shadowRoot) {
     // Check if we already injected the CSS to avoid duplicates
@@ -472,13 +662,16 @@ function createRecentSearchPlaceholder(): HTMLElement {
  * Replaces them with placeholders instead of removing
  */
 function filterRecentSearches(shadowRoot: ShadowRoot): void {
+  if (!isBlockingEnabled()) {
+    return;
+  }
+
   const recentSearchItems = shadowRoot.querySelectorAll(SELECTORS.shadowDOM.recentSearchItem);
 
   recentSearchItems.forEach((item) => {
     if (isNSFWRecentSearch(item) && !item.classList.contains(CONFIG.blankedClass)) {
       item.classList.add(CONFIG.blankedClass);
-      const placeholder = createRecentSearchPlaceholder();
-      item.replaceWith(placeholder);
+      applyBlockingToElement(item, () => createRecentSearchPlaceholder());
     }
   });
 }
@@ -488,12 +681,16 @@ function filterRecentSearches(shadowRoot: ShadowRoot): void {
  * Called by the Shadow DOM MutationObserver when changes are detected
  */
 function replaceNSFWSection(shadowRoot: ShadowRoot): void {
+  if (!isBlockingEnabled()) {
+    return;
+  }
+
   // Handle the 18+ expandable section
   const nsfwSection = shadowRoot.querySelector(SELECTORS.shadowDOM.nsfwSection);
   if (nsfwSection && !nsfwSection.classList.contains(CONFIG.blankedClass)) {
     nsfwSection.classList.add(CONFIG.blankedClass);
-    const placeholder = createSearchPlaceholder();
-    nsfwSection.replaceWith(placeholder);
+    // For the NSFW section, respect user's blocking style
+    applyBlockingToElement(nsfwSection, () => createSearchPlaceholder());
   }
 
   // Also filter NSFW items from recent searches
@@ -505,11 +702,19 @@ function replaceNSFWSection(shadowRoot: ShadowRoot): void {
  * Separated helper to avoid code duplication
  */
 function setupShadowObserver(shadowRoot: ShadowRoot): void {
+  if (!isBlockingEnabled()) {
+    return;
+  }
+
   // Check if NSFW section already exists and replace it
   replaceNSFWSection(shadowRoot);
 
   // Set up observer for future changes
   const shadowObserver = new MutationObserver(() => {
+    if (!isBlockingEnabled()) {
+      return;
+    }
+
     replaceNSFWSection(shadowRoot);
   });
 
@@ -524,6 +729,10 @@ function setupShadowObserver(shadowRoot: ShadowRoot): void {
  * Waits for shadowRoot to be ready if not yet available
  */
 function observeShadowDOM(): void {
+  if (!isBlockingEnabled()) {
+    return;
+  }
+
   const searchElement = document.querySelector(SELECTORS.shadowDOM.searchHost);
   if (!searchElement) {
     return;
@@ -543,55 +752,32 @@ function observeShadowDOM(): void {
 }
 
 /**
- * Filters NSFW subreddits from sidebar recent pages
+ * Creates a compact placeholder for blocked sidebar items
  */
-function filterSidebarRecentPages(shadowRoot: ShadowRoot): void {
-  const recentLinks = shadowRoot.querySelectorAll(SELECTORS.shadowDOM.sidebarRecentItem);
-
-  recentLinks.forEach((link) => {
-    const href = link.getAttribute("href");
-    if (!href) return;
-
-    const match = href.match(/^\/r\/([^/]+)/);
-    if (match) {
-      const subreddit = match[1].toLowerCase();
-      if (blockedSubreddits.has(subreddit)) {
-        const listItem = link.closest("li");
-        if (listItem && !listItem.classList.contains(CONFIG.blankedClass)) {
-          listItem.classList.add(CONFIG.blankedClass);
-          listItem.remove();
-          log(`Removed ${subreddit} from sidebar recent pages`);
-        }
-      }
-    }
-  });
-}
-
-/**
- * Sets up observer for sidebar Shadow DOM
- */
-function observeSidebarDOM(): void {
-  const sidebarElement = document.querySelector(SELECTORS.shadowDOM.sidebarHost);
-  if (!sidebarElement || !sidebarElement.shadowRoot) {
-    return;
-  }
-
-  // Filter existing items
-  filterSidebarRecentPages(sidebarElement.shadowRoot);
-
-  // Watch for changes
-  const sidebarObserver = new MutationObserver(() => {
-    if (sidebarElement.shadowRoot) {
-      filterSidebarRecentPages(sidebarElement.shadowRoot);
-    }
-  });
-
-  sidebarObserver.observe(sidebarElement.shadowRoot, {
-    childList: true,
-    subtree: true,
-  });
-
-  log("Sidebar Shadow DOM observer initialized");
+function createSidebarPlaceholder(subreddit: string): HTMLDivElement {
+  const placeholder = document.createElement("div");
+  placeholder.className = `${CONFIG.placeholderClass}-content`;
+  placeholder.setAttribute("data-placeholder-subreddit", subreddit.toLowerCase());
+  placeholder.style.cssText = `
+    width: 100%;
+    padding: 8px 16px;
+    background: #f6f7f8;
+    border-radius: 4px;
+    margin: 2px 0;
+    color: #7c7c7c;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    text-align: center;
+    pointer-events: none;
+    box-sizing: border-box;
+  `;
+  placeholder.innerHTML = `
+    <div style="font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 6px;">
+      <span aria-hidden="true">🔒</span>
+      <span>Blocked subreddit</span>
+    </div>
+  `;
+  return placeholder;
 }
 
 /**
@@ -599,6 +785,10 @@ function observeSidebarDOM(): void {
  * Handles both immediate and delayed appearance of the search element
  */
 function setupShadowDOMWatcher(): void {
+  if (!isBlockingEnabled()) {
+    return;
+  }
+
   // Check if search element already exists
   const existingSearchElement = document.querySelector(SELECTORS.shadowDOM.searchHost);
   if (existingSearchElement) {
@@ -609,7 +799,7 @@ function setupShadowDOMWatcher(): void {
   // Check if sidebar element already exists
   const existingSidebarElement = document.querySelector(SELECTORS.shadowDOM.sidebarHost);
   if (existingSidebarElement) {
-    observeSidebarDOM();
+    sidebarFilter.observeSidebarDOM();
   }
 
   // If both exist, we're done
@@ -634,6 +824,10 @@ function setupShadowDOMWatcher(): void {
 
   // Wait for Shadow DOM elements to appear
   const mainObserver = new MutationObserver(() => {
+    if (!isBlockingEnabled()) {
+      return;
+    }
+
     const searchElement = document.querySelector(SELECTORS.shadowDOM.searchHost);
     const sidebarElement = document.querySelector(SELECTORS.shadowDOM.sidebarHost);
 
@@ -643,7 +837,7 @@ function setupShadowDOMWatcher(): void {
     }
 
     if (sidebarElement && !existingSidebarElement) {
-      observeSidebarDOM();
+      sidebarFilter.observeSidebarDOM();
     }
 
     // Disconnect if both are found
@@ -689,7 +883,8 @@ function init(): void {
     const currentUrl = location.href;
     if (currentUrl !== lastUrl) {
       lastUrl = currentUrl;
-      log("URL changed, re-initializing Shadow DOM watcher");
+      // Reset sidebar state on navigation to force re-processing
+      sidebarFilter.resetState();
       // Re-setup Shadow DOM watcher after navigation
       setupShadowDOMWatcher();
       processPage();
@@ -700,7 +895,41 @@ function init(): void {
   });
 }
 
+const handleSettingsUpdate = (settings: ExtensionSettings): void => {
+  const wasBlocking = extensionSettings.blockingEnabled;
+  const previousStyle = extensionSettings.blockingStyle;
+  extensionSettings = settings;
+
+  if (settings.blockingEnabled) {
+    ensureInitialized();
+    if ((!wasBlocking || previousStyle !== settings.blockingStyle) && observersInitialized) {
+      processPage();
+    }
+  } else if (wasBlocking) {
+    log("Guard Your Mind blocking disabled via settings");
+  }
+
+  if (previousStyle === "blur" && settings.blockingStyle !== "blur") {
+    clearBlurredElements();
+  }
+
+  if (!settings.blockingEnabled && previousStyle === "blur") {
+    clearBlurredElements();
+  }
+};
+
 // Start the extension (only in content script context)
 if (typeof document !== "undefined") {
-  init();
+  subscribeToSettings(handleSettingsUpdate);
+
+  void getSettings()
+    .then((settings) => {
+      handleSettingsUpdate(settings);
+    })
+    .catch((error) => {
+      console.error("Failed to load Guard Your Mind settings", error);
+      if (isBlockingEnabled()) {
+        ensureInitialized();
+      }
+    });
 }

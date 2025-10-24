@@ -46,9 +46,11 @@ The extension follows Manifest V3 architecture with three main components:
    - Detects SPA navigation to persist filtering across page changes
 
 3. **Popup UI** (`src/popup/`)
-   - Browser action popup with enable/disable toggle
-   - Displays blocked content counter for current session
+   - Browser action popup with enable/disable toggle, blocking style dropdown, and counter preference
    - Uses vanilla HTML/CSS/TypeScript (no heavy framework)
+   - Persists settings via `chrome.storage` (sync with local fallback)
+4. **Shared Utilities** (`src/shared/settings.ts`)
+   - Centralizes default settings, storage helpers, and subscriptions for popup/content coordination
 
 ### Build System
 
@@ -84,15 +86,18 @@ Implementation details:
 
 ### Blanking Behavior
 
-- Replace blocked content with **fixed-height placeholders** to prevent layout shifts
-- Use neutral styling (gray background) matching container dimensions
-- Optional configurable "Blocked by Guard Your Mind" text (subtle)
+- Blocking style is configurable; options currently include:
+  - `placeholder`: neutral fixed-height card that preserves layout
+  - `remove`: drop the offending element entirely
+  - `quotes`: swap in one of several motivational quotes
+  - `blur`: blur the content in place with an overlay banner
 - Must not break Reddit's native voting, comments, or navigation for unblocked content
 
 ### Storage & State
 
-- Use `chrome.storage` APIs (permission already declared in manifest)
-- Store minimal state: enable/disable toggle, session block counter
+- Use `chrome.storage.sync` when available (falls back to local)
+- Stored settings include: `blockingEnabled`, `blockingStyle`, `showBlockedCounter`
+- Content script subscribes to storage changes to react instantly
 - No telemetry or remote logging in Phase 1
 
 ### Performance Constraints
@@ -142,18 +147,21 @@ Implementation details:
 - ✅ Sidebar recent pages filtering (removes visited NSFW subreddits)
 - ✅ SPA navigation detection (re-initializes filters on page changes)
 - ✅ In-memory tracking of blocked subreddits
+- ✅ Popup settings with persistent enable toggle and blocking style selection
+- ✅ Configurable blocking modes (placeholder/remove/quotes/blur)
 - ✅ Production-ready code (optimized, documented, tested)
 
 ### Known Limitations
 
 - Blocked subreddit list is in-memory only (resets on page reload)
-- No user settings/preferences yet (all blocking enabled by default)
-- No persistence across sessions (will be added with chrome.storage)
+- Blocked counter preference exists, but counter telemetry is not yet wired to UI
+- Switching blocking styles does not retroactively restore previously blanked/removed DOM (requires refresh)
 
 ### Next Steps
 
 See `todo.md` for full roadmap. High priority items:
 
-- Settings UI with blocking style options (placeholder/remove/quotes/blur)
-- chrome.storage.sync for persistent settings
-- Enable/disable toggle in popup
+- Surface live blocked counter data in popup
+- Tweak blocking style experiences (quote variants, blur overlay polish, optional placeholder messaging)
+- Content-type specific toggles (entire subreddits vs individual posts vs search results)
+- Expand automated testing coverage for detection logic
