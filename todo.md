@@ -17,6 +17,9 @@
 - [x] Handle sidebar recent pages (filter NSFW subreddits from recent visits).
 - [x] Add SPA navigation detection to persist filtering across page changes.
 - [x] Track visited NSFW subreddits in-memory for cross-page filtering.
+- [x] Remember blocked subreddits across reloads via `chrome.storage.local`.
+- [x] Extract sidebar filtering logic into dedicated module for reuse/testing.
+- [x] Add optional blocking toggle for posts/subreddits tagged 18+ (default on).
 
 ## In Progress
 

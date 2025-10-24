@@ -1,7 +1,12 @@
 import type { BlockingStyle, ExtensionSettings } from "../shared/settings";
-import { DEFAULT_SETTINGS, getSettings, subscribeToSettings } from "../shared/settings";
+import {
+  DEFAULT_SETTINGS,
+  getBlockedSubreddits,
+  getSettings,
+  setBlockedSubreddits,
+  subscribeToSettings,
+} from "../shared/settings";
 import { createSidebarFilter } from "./sidebarFilter";
-
 /**
  * Guard Your Mind - Content Script
  * Detects and blanks mature (18+) content on Reddit
@@ -20,7 +25,41 @@ let observersInitialized = false;
 
 const isBlockingEnabled = (): boolean => extensionSettings.blockingEnabled;
 const getBlockingStyle = (): BlockingStyle => extensionSettings.blockingStyle ?? "placeholder";
+const shouldBlock18Plus = (): boolean => extensionSettings.block18PlusContent !== false;
 
+type ShadowHost = Element & { shadowRoot?: ShadowRoot | null };
+
+const querySelectorWithin = (element: Element, selector: string): Element | null => {
+  const direct = element.querySelector(selector);
+  if (direct) {
+    return direct;
+  }
+  const host = element as ShadowHost;
+  return host.shadowRoot?.querySelector(selector) ?? null;
+};
+
+const querySelectorAllWithin = (element: Element, selector: string): Element[] => {
+  const matches = Array.from(element.querySelectorAll(selector));
+  const host = element as ShadowHost;
+  if (host.shadowRoot) {
+    matches.push(...host.shadowRoot.querySelectorAll(selector));
+  }
+  return matches;
+};
+
+const hasTruthyAttribute = (element: Element, attributeName: string): boolean => {
+  if (!element.hasAttribute(attributeName)) {
+    return false;
+  }
+
+  const value = element.getAttribute(attributeName);
+  if (value === null) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === "" || normalized === "true" || normalized === attributeName.toLowerCase();
+};
 const ensureInitialized = (): void => {
   if (observersInitialized || !isBlockingEnabled()) {
     return;
@@ -41,7 +80,7 @@ const SELECTORS = {
     },
     // Post-level indicators
     post: {
-      tags: '[data-testid="post-nsfw-tag"], .nsfw-tag, ._3VgTjAJVNNV7jzlnwY-OFY',
+      tags: '[data-testid="post-nsfw-tag"], .nsfw-tag, ._3VgTjAJVNNV7jzlnwY-OFY, faceplate-tag[icon*="nsfw"], faceplate-badge[icon*="nsfw"], faceplate-pill[icon*="nsfw"], faceplate-tag[icon*="18"], faceplate-badge[icon*="18"], faceplate-pill[icon*="18"]',
       blur: '[data-blur-nsfw], .blur, ._1TrMDpkvzUBleMF5LjV_gS, [style*="blur"]',
       title: '[data-testid="post-title"]',
     },
@@ -106,6 +145,20 @@ function log(...args: unknown[]): void {
   }
 }
 
+let persistBlockedSubredditsTimeout: number | null = null;
+const schedulePersistBlockedSubreddits = (): void => {
+  if (persistBlockedSubredditsTimeout !== null) {
+    window.clearTimeout(persistBlockedSubredditsTimeout);
+  }
+
+  persistBlockedSubredditsTimeout = window.setTimeout(() => {
+    persistBlockedSubredditsTimeout = null;
+    void setBlockedSubreddits(Array.from(blockedSubreddits)).catch((error) => {
+      console.error("Guard Your Mind failed to persist blocked subreddits", error);
+    });
+  }, 100);
+};
+
 const sidebarFilter = createSidebarFilter({
   config: {
     blankedClass: CONFIG.blankedClass,
@@ -126,6 +179,20 @@ const sidebarFilter = createSidebarFilter({
   log,
 });
 
+void getBlockedSubreddits()
+  .then((storedSubreddits) => {
+    if (!storedSubreddits.length) {
+      return;
+    }
+
+    storedSubreddits.forEach((subreddit) => blockedSubreddits.add(subreddit));
+    sidebarFilter.resetState();
+    sidebarFilter.triggerRefresh();
+  })
+  .catch((error) => {
+    console.error("Guard Your Mind failed to load blocked subreddits", error);
+  });
+
 function extractSubredditFromHref(href: string): string | null {
   const match = href.match(/\/r\/([^/?#]+)/i);
   if (!match) {
@@ -145,32 +212,48 @@ function extractSubredditFromHref(href: string): string | null {
  * Also tracks blocked subreddits for sidebar filtering
  */
 function isMatureSubreddit(): boolean {
+  const block18Plus = shouldBlock18Plus();
+
   // Check for over18 attribute on body
   const body = document.body;
-  if (body?.dataset.over18 === "true" || body?.dataset.isOver18 === "true") {
+  if (block18Plus && (body?.dataset.over18 === "true" || body?.dataset.isOver18 === "true")) {
     trackCurrentSubreddit("body dataset flag");
     return true;
   }
 
   // Check shreddit-app element (new Reddit)
   const shredditApp = document.querySelector(SELECTORS.mature.subreddit.app);
-  if (
-    shredditApp?.getAttribute("over18") === "true" ||
-    shredditApp?.getAttribute("routeisnsfw") === "true"
-  ) {
+  const appRouteIsNSFW = shredditApp?.getAttribute("routeisnsfw") === "true";
+  if (appRouteIsNSFW) {
+    trackCurrentSubreddit("shreddit-app attributes");
+    return true;
+  }
+  if (block18Plus && shredditApp?.getAttribute("over18") === "true") {
     trackCurrentSubreddit("shreddit-app attributes");
     return true;
   }
 
   // Check for NSFW indicator in subreddit header
-  if (document.querySelector(SELECTORS.mature.subreddit.badges)) {
-    trackCurrentSubreddit("subreddit header badge");
-    return true;
+  const badgeElement = document.querySelector(SELECTORS.mature.subreddit.badges);
+  if (badgeElement) {
+    const badgeIcon = (badgeElement as HTMLElement).getAttribute("icon")?.toLowerCase() ?? "";
+    const badgeText = badgeElement.textContent?.toLowerCase() ?? "";
+    const isNSFWBadge = badgeIcon.includes("nsfw") || badgeText.includes("nsfw");
+    const is18Badge = badgeIcon.includes("18") || badgeText.includes("18+");
+
+    if (isNSFWBadge || (block18Plus && is18Badge)) {
+      trackCurrentSubreddit("subreddit header badge");
+      return true;
+    }
   }
 
   // Check page title
   const pageTitle = document.title.toLowerCase();
-  if (pageTitle.includes("nsfw") || pageTitle.includes("18+")) {
+  if (pageTitle.includes("nsfw")) {
+    trackCurrentSubreddit("page title hint");
+    return true;
+  }
+  if (block18Plus && pageTitle.includes("18+")) {
     trackCurrentSubreddit("page title hint");
     return true;
   }
@@ -195,6 +278,7 @@ function trackCurrentSubreddit(reason: string): void {
       );
       sidebarFilter.resetState();
       sidebarFilter.triggerRefresh();
+      schedulePersistBlockedSubreddits();
     } else {
       log(`Subreddit "${subreddit}" already tracked (triggered by ${reason}).`);
       sidebarFilter.triggerRefresh();
@@ -210,36 +294,78 @@ function trackCurrentSubreddit(reason: string): void {
  * Detects if a specific post element is mature content
  */
 function isMaturePost(element: Element): boolean {
-  // Check for NSFW tag/flair
-  if (element.querySelector(SELECTORS.mature.post.tags)) {
-    return true;
+  const block18Plus = shouldBlock18Plus();
+
+  const badgeElements = querySelectorAllWithin(element, SELECTORS.mature.post.tags);
+  for (const badge of badgeElements) {
+    const icon = (badge as HTMLElement).getAttribute("icon")?.toLowerCase() ?? "";
+    const badgeText = badge.textContent?.toLowerCase() ?? "";
+
+    if (icon.includes("nsfw") || badgeText.includes("nsfw")) {
+      return true;
+    }
+
+    if (block18Plus && (icon.includes("18") || badgeText.includes("18+"))) {
+      return true;
+    }
   }
 
   // Check for blur overlay (Reddit's native NSFW blur)
-  if (element.querySelector(SELECTORS.mature.post.blur)) {
+  if (querySelectorWithin(element, SELECTORS.mature.post.blur)) {
     return true;
   }
 
-  // Check data attributes on the post element itself
-  if (
-    element.getAttribute("data-nsfw") === "true" ||
-    element.getAttribute("data-over18") === "true"
-  ) {
+  // Explicit NSFW attributes
+  if (hasTruthyAttribute(element, "data-nsfw") || hasTruthyAttribute(element, "nsfw")) {
+    return true;
+  }
+
+  const shredditPostHost = element.closest("shreddit-post");
+
+  // 18+ attributes guarded by the user preference
+  if (block18Plus) {
+    if (hasTruthyAttribute(element, "data-over18") || hasTruthyAttribute(element, "over18")) {
+      return true;
+    }
+
+    if (
+      shredditPostHost &&
+      (hasTruthyAttribute(shredditPostHost, "over18") ||
+        hasTruthyAttribute(shredditPostHost, "data-over18"))
+    ) {
+      return true;
+    }
+
+    if (shredditPostHost && hasTruthyAttribute(shredditPostHost, "nsfw")) {
+      return true;
+    }
+
+    if (querySelectorWithin(element, '[data-over18="true"], [over18="true"]')) {
+      return true;
+    }
+  } else if (shredditPostHost && hasTruthyAttribute(shredditPostHost, "nsfw")) {
     return true;
   }
 
   // Check for NSFW in post title or flair text
   const postText =
-    element.querySelector(SELECTORS.mature.post.title)?.textContent ||
-    element.querySelector("h3")?.textContent ||
+    querySelectorWithin(element, SELECTORS.mature.post.title)?.textContent ||
+    querySelectorWithin(element, "h3")?.textContent ||
     "";
-  if (postText.toLowerCase().includes("nsfw")) {
+  const postTextLower = postText.toLowerCase();
+  if (postTextLower.includes("nsfw")) {
+    return true;
+  }
+  if (block18Plus && postTextLower.includes("18+")) {
     return true;
   }
 
   // Check aria-label or other accessibility attributes
   const ariaLabel = element.getAttribute("aria-label")?.toLowerCase() || "";
-  if (ariaLabel.includes("nsfw") || ariaLabel.includes("18+")) {
+  if (ariaLabel.includes("nsfw")) {
+    return true;
+  }
+  if (block18Plus && ariaLabel.includes("18+")) {
     return true;
   }
 
@@ -251,6 +377,8 @@ function isMaturePost(element: Element): boolean {
  * Used for filtering individual search results outside of Shadow DOM
  */
 function isMatureSearchResult(element: Element): boolean {
+  const block18Plus = shouldBlock18Plus();
+
   // Check for NSFW subreddit icon in autocomplete
   if (element.querySelector(SELECTORS.mature.search.icon)) {
     return true;
@@ -263,26 +391,57 @@ function isMatureSearchResult(element: Element): boolean {
 
   // Check the tracking context data for nsfw:true
   const trackingContext = element.getAttribute("data-faceplate-tracking-context");
-  if (trackingContext && trackingContext.includes('"nsfw":true')) {
-    return true;
+  if (trackingContext) {
+    if (trackingContext.includes('"nsfw":true')) {
+      return true;
+    }
+    if (
+      block18Plus &&
+      (trackingContext.includes('"over18":true') ||
+        trackingContext.includes('"over_18":true') ||
+        trackingContext.includes('"isOver18":true'))
+    ) {
+      return true;
+    }
   }
 
   // Check for NSFW badge/flair in search result
   const nsfwBadge = element.querySelector(SELECTORS.mature.search.badges);
   if (nsfwBadge) {
-    const badgeText = nsfwBadge.textContent?.toLowerCase() || "";
-    if (badgeText.includes("nsfw") || badgeText.includes("18+")) {
+    const badgeElement = nsfwBadge as HTMLElement;
+    const badgeText = badgeElement.textContent?.toLowerCase() || "";
+    const badgeIcon = badgeElement.getAttribute("icon")?.toLowerCase() || "";
+    if (badgeText.includes("nsfw") || badgeIcon.includes("nsfw")) {
+      return true;
+    }
+    if (block18Plus && (badgeText.includes("18+") || badgeIcon.includes("18"))) {
       return true;
     }
   }
 
   // Check data attributes
-  if (
-    element.getAttribute("data-nsfw") === "true" ||
-    element.getAttribute("data-over18") === "true" ||
-    element.getAttribute("nsfw") === "true"
-  ) {
+  if (element.getAttribute("data-nsfw") === "true" || element.getAttribute("nsfw") === "true") {
     return true;
+  }
+
+  if (block18Plus) {
+    if (
+      hasTruthyAttribute(element, "data-over18") ||
+      hasTruthyAttribute(element, "over18") ||
+      hasTruthyAttribute(element, "nsfw")
+    ) {
+      return true;
+    }
+
+    const shredditPost = element.closest("shreddit-post");
+    if (
+      shredditPost &&
+      (hasTruthyAttribute(shredditPost, "over18") ||
+        hasTruthyAttribute(shredditPost, "nsfw") ||
+        hasTruthyAttribute(shredditPost, "data-over18"))
+    ) {
+      return true;
+    }
   }
 
   return false;
@@ -627,7 +786,19 @@ function isNSFWRecentSearch(element: Element): boolean {
   try {
     // The tracking context contains JSON with subreddit info
     // Look for "nsfw":true in the tracking context
-    return trackingContext.includes('"nsfw":true');
+    if (trackingContext.includes('"nsfw":true')) {
+      return true;
+    }
+
+    if (shouldBlock18Plus()) {
+      return (
+        trackingContext.includes('"over18":true') ||
+        trackingContext.includes('"over_18":true') ||
+        trackingContext.includes('"isOver18":true')
+      );
+    }
+
+    return false;
   } catch {
     return false;
   }
@@ -893,17 +1064,38 @@ function init(): void {
     subtree: true,
     childList: true,
   });
+
+  window.addEventListener("beforeunload", () => {
+    if (persistBlockedSubredditsTimeout !== null) {
+      window.clearTimeout(persistBlockedSubredditsTimeout);
+      persistBlockedSubredditsTimeout = null;
+      void setBlockedSubreddits(Array.from(blockedSubreddits)).catch((error) => {
+        console.error("Guard Your Mind failed to persist blocked subreddits before unload", error);
+      });
+    }
+  });
 }
 
 const handleSettingsUpdate = (settings: ExtensionSettings): void => {
   const wasBlocking = extensionSettings.blockingEnabled;
   const previousStyle = extensionSettings.blockingStyle;
+  const previousBlock18 = extensionSettings.block18PlusContent;
   extensionSettings = settings;
+
+  const block18Changed = previousBlock18 !== settings.block18PlusContent;
+  const shouldReprocess =
+    (!wasBlocking || previousStyle !== settings.blockingStyle || block18Changed) &&
+    observersInitialized;
 
   if (settings.blockingEnabled) {
     ensureInitialized();
-    if ((!wasBlocking || previousStyle !== settings.blockingStyle) && observersInitialized) {
+    if (shouldReprocess) {
       processPage();
+      sidebarFilter.resetState();
+      sidebarFilter.triggerRefresh();
+    } else if (block18Changed) {
+      sidebarFilter.resetState();
+      sidebarFilter.triggerRefresh();
     }
   } else if (wasBlocking) {
     log("Guard Your Mind blocking disabled via settings");

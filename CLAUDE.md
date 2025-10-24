@@ -41,8 +41,8 @@ The extension follows Manifest V3 architecture with three main components:
    - Injected into all `https://*.reddit.com/*` pages at `document_start`
    - Responsible for detecting and blanking mature content
    - Handles both initial page load and dynamic content (infinite scroll via MutationObserver)
-   - Manages Shadow DOM filtering for search dropdown and sidebar recent pages
-   - Tracks visited NSFW subreddits in-memory for cross-page filtering
+   - Manages Shadow DOM filtering for search dropdown and sidebar recent pages (via `src/content/sidebarFilter.ts`)
+   - Tracks visited NSFW subreddits and persists them in `chrome.storage.local` so refreshes retain the blocked list
    - Detects SPA navigation to persist filtering across page changes
 
 3. **Popup UI** (`src/popup/`)
@@ -96,7 +96,8 @@ Implementation details:
 ### Storage & State
 
 - Use `chrome.storage.sync` when available (falls back to local)
-- Stored settings include: `blockingEnabled`, `blockingStyle`, `showBlockedCounter`
+- Stored settings include: `blockingEnabled`, `blockingStyle`, `showBlockedCounter`, `block18PlusContent`
+- Persist blocked subreddit visits to `chrome.storage.local` (`getBlockedSubreddits` / `setBlockedSubreddits`) to keep sidebar filtering consistent across refreshes
 - Content script subscribes to storage changes to react instantly
 - No telemetry or remote logging in Phase 1
 
@@ -146,14 +147,15 @@ Implementation details:
 - ✅ Search dropdown filtering (18+ section + recent NSFW searches) via Shadow DOM
 - ✅ Sidebar recent pages filtering (removes visited NSFW subreddits)
 - ✅ SPA navigation detection (re-initializes filters on page changes)
-- ✅ In-memory tracking of blocked subreddits
+- ✅ Persistent tracking of blocked subreddits using `chrome.storage.local`
+- ✅ User-selectable handling of 18+ tagged posts and subreddits (popup toggle, enabled by default)
 - ✅ Popup settings with persistent enable toggle and blocking style selection
 - ✅ Configurable blocking modes (placeholder/remove/quotes/blur)
 - ✅ Production-ready code (optimized, documented, tested)
 
 ### Known Limitations
 
-- Blocked subreddit list is in-memory only (resets on page reload)
+- Blocked subreddit list is stored locally; it does not sync across browser profiles/devices yet
 - Blocked counter preference exists, but counter telemetry is not yet wired to UI
 - Switching blocking styles does not retroactively restore previously blanked/removed DOM (requires refresh)
 

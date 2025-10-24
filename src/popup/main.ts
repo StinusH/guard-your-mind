@@ -7,12 +7,13 @@ import {
   subscribeToSettings,
 } from "../shared/settings";
 
-type ToggleSettingKey = "blockingEnabled" | "showBlockedCounter";
+type ToggleSettingKey = "blockingEnabled" | "block18PlusContent" | "showBlockedCounter";
 
 interface ToggleSettingField {
   key: ToggleSettingKey;
   label: string;
   description: string;
+  tooltip?: string;
 }
 
 interface BlockingStyleOption {
@@ -26,6 +27,13 @@ const TOGGLE_FIELDS: ToggleSettingField[] = [
     key: "blockingEnabled",
     label: "Enable Reddit blocking",
     description: "Blank mature (18+) content on Reddit across all pages.",
+  },
+  {
+    key: "block18PlusContent",
+    label: 'Block posts tagged "18+"',
+    description: "Include Reddit’s 18+ marker when deciding what to blank.",
+    tooltip:
+      "The 18+ tag covers all adult content on Reddit, including sexual imagery, nudity, and graphic violence.",
   },
   {
     key: "showBlockedCounter",
@@ -205,6 +213,15 @@ const createToggle = (field: ToggleSettingField): HTMLLabelElement => {
   const label = document.createElement("span");
   label.className = "setting-toggle__label";
   label.textContent = field.label;
+  if (field.tooltip) {
+    const tooltip = document.createElement("span");
+    tooltip.className = "setting-toggle__tooltip";
+    tooltip.textContent = "i";
+    tooltip.title = field.tooltip;
+    tooltip.setAttribute("role", "img");
+    tooltip.setAttribute("aria-label", field.tooltip);
+    label.appendChild(tooltip);
+  }
 
   const description = document.createElement("span");
   description.className = "setting-toggle__description";
