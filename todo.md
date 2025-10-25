@@ -6,8 +6,6 @@
 - [x] Initialize npm project and configure Vite + TypeScript bundling.
 - [x] Configure linting (ESLint) and formatting (Prettier).
 - [x] Hook ESLint/Prettier into Husky pre-commit via lint-staged.
-- [x] Build popup settings UI (blocking toggle, style dropdown, counter toggle).
-- [x] Implement basic local storage state management (extension settings in chrome.storage).
 - [x] Implement Reddit domain matching and early content script injection.
 - [x] Prototype mature subreddit detection (page-level flag, CSS class/JSON data inspection).
 - [x] Implement DOM blanking for subreddit listing pages; verify consistent spacing.
@@ -17,27 +15,20 @@
 - [x] Handle sidebar recent pages (filter NSFW subreddits from recent visits).
 - [x] Add SPA navigation detection to persist filtering across page changes.
 - [x] Track visited NSFW subreddits in-memory for cross-page filtering.
-- [x] Remember blocked subreddits across reloads via `chrome.storage.local`.
-- [x] Extract sidebar filtering logic into dedicated module for reuse/testing.
-- [x] Add optional blocking toggle for posts/subreddits tagged 18+ (default on).
-- [x] Enforce default always-blocked domains (e.g., redgifs.com) regardless of Reddit tags.
 
 ## In Progress
 
+- [x] Build popup settings UI (enable toggle, placeholder preference, counter toggle).
 - [ ] Surface live blocked counter in popup.
+- [ ] Implement basic local storage state management.
 
 ## User Settings & Customization (High Priority)
 
-- [ ] Expand settings UI with additional customization:
-  - **Blocking Styles**: Implement visual polish for each style (quotes variations, blur overlay customization).
-  - **Toggle by content type**: Enable/disable blocking for:
-    - Mature subreddits (entire page)
-    - Individual NSFW posts in feeds
-    - Search results (dropdown and search pages)
-  - **Visual customization**:
-    - Placeholder color scheme
-    - Custom message text
-    - Show/hide lock icon
+- [ ] Create settings page/popup UI with the following options:
+  - **Blocking Styles**: Allow users to choose how content is blocked:
+    - `placeholder` (current default): Gray box with "Content Blocked" message
+    - `remove`: Completely remove the element from DOM
+    - `quotes`: Replace with inspirational/motivational quotes
 - [ ] Implement chrome.storage.sync for persisting user settings across devices.
 - [ ] Refactor content script to read settings and apply chosen blocking style.
 - [ ] Add settings import/export functionality.

@@ -1,3 +1,4 @@
+import type { ShadowHost } from "../shared/dom";
 import type { BlockingStyle, ExtensionSettings } from "../shared/settings";
 import {
   ALWAYS_BLOCKED_DOMAINS,
@@ -16,7 +17,7 @@ import { createSidebarFilter } from "./sidebarFilter";
 
 // Configuration
 const CONFIG = {
-  debugMode: false, // Toggle manually when deep debugging is required
+  debugMode: true, // Toggle manually when deep debugging is required
   blankedClass: "gym-blanked",
   placeholderClass: "gym-placeholder",
   blurredClass: "gym-blurred",
@@ -28,8 +29,6 @@ let observersInitialized = false;
 const isBlockingEnabled = (): boolean => extensionSettings.blockingEnabled;
 const getBlockingStyle = (): BlockingStyle => extensionSettings.blockingStyle ?? "placeholder";
 const shouldBlock18Plus = (): boolean => extensionSettings.block18PlusContent !== false;
-
-type ShadowHost = Element & { shadowRoot?: ShadowRoot | null };
 
 const querySelectorWithin = (element: Element, selector: string): Element | null => {
   const direct = element.querySelector(selector);
@@ -222,6 +221,10 @@ const SELECTORS = {
     recentSearchItem: "faceplate-tracker[data-faceplate-tracking-context]",
     sidebarRecentItem: "li[role='presentation']",
     sidebarRecentLink: "a[href*='/r/']",
+    communityController: "#communities_section left-nav-communities-controller",
+    communityItem: "left-nav-community-item",
+    communityItemLink: "a[href*='/r/']",
+    communityItemList: "li",
     cssId: "gym-hide-nsfw-search",
   },
 };
@@ -260,6 +263,10 @@ const sidebarFilter = createSidebarFilter({
       sidebarRecentItem: SELECTORS.shadowDOM.sidebarRecentItem,
       sidebarRecentLink: SELECTORS.shadowDOM.sidebarRecentLink,
       sidebarHost: SELECTORS.shadowDOM.sidebarHost,
+      communityController: SELECTORS.shadowDOM.communityController,
+      communityItem: SELECTORS.shadowDOM.communityItem,
+      communityItemLink: SELECTORS.shadowDOM.communityItemLink,
+      communityItemList: SELECTORS.shadowDOM.communityItemList,
     },
   },
   blockedSubreddits,

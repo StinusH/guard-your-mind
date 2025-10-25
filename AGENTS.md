@@ -4,7 +4,7 @@
 
 - **`src/background`**: Service worker entry that coordinates lifecycle events and listens for settings updates.
 - **`src/content`**: Core detection logic that blanks mature Reddit content; toggle `debugMode` here when troubleshooting. Reads live preferences via `subscribeToSettings`.
-- **`src/content/sidebarFilter.ts`**: Encapsulates the sidebar “Recent” filtering logic with a reusable controller that manages Shadow DOM observers and placeholder application.
+- **`src/content/sidebarFilter.ts`**: Encapsulates the sidebar “Recent” and “Communities” filtering logic with a reusable controller that manages Shadow DOM observers and placeholder application.
 - **`src/popup`**: Extension UI assets (`index.html`, `main.ts`, `style.css`) bundled by Vite. Hosts the enable toggle, blocking-style dropdown, and counter preference.
 - **`src/shared`**: Shared TypeScript utilities (e.g., `settings.ts`) that define `BlockingStyle`, defaults, and chrome.storage helpers used by popup/content modules.
 - **`scripts/fix-manifest.js`**: Post-build helper that adjusts the Chromium manifest; keep it in sync with `manifest.config.ts`.

@@ -150,7 +150,7 @@ Implementation details:
 - ✅ Mature subreddit detection and blocking (entire page)
 - ✅ Individual NSFW post detection in feeds (with placeholders)
 - ✅ Search dropdown filtering (18+ section + recent NSFW searches) via Shadow DOM
-- ✅ Sidebar recent pages filtering (removes visited NSFW subreddits)
+- ✅ Sidebar recent pages & communities filtering (removes visited NSFW subreddits)
 - ✅ SPA navigation detection (re-initializes filters on page changes)
 - ✅ Persistent tracking of blocked subreddits using `chrome.storage.local`
 - ✅ User-selectable handling of 18+ tagged posts and subreddits (popup toggle, enabled by default)
