@@ -42,6 +42,13 @@
 - Markdown tooling (e.g., `mdlint` optional) for PRD/TODO upkeep.
 - Issue tracking via GitHub Projects or similar (out of scope for repo but noted).
 
+## Current Architecture Notes
+
+- **Content Script** is organized by responsibility: shared config/helpers (`src/content/config.ts`, `dom.ts`), domain/state coordination (`state.ts`, `logger.ts`), detection logic split across `src/content/detection/{subreddit,post,search,domains}.ts`, visual treatments in `blocking.ts`/`placeholders.ts`, and Shadow DOM orchestration in `shadowWatchers.ts`. `index.ts` now acts as the thin entry point wiring these modules together.
+- **Sidebar filtering** lives under `src/content/sidebar/` with `filterRunner.ts` and `placeholders.ts` handling DOM updates; `sidebarFilter.ts` remains the public controller.
+- **Popup** UI is modular: metadata/constants (`src/popup/config.ts`), layout rendering (`layout.ts`), status + settings controllers (`statusController.ts`, `settingsController.ts`), and blocked list management (`blockedListController.ts`), all orchestrated by `src/popup/main.ts`.
+- **Shared storage utilities** remain in `src/shared/settings.ts`, consumed by both content and popup modules to persist user preferences and blocked subreddit lists.
+
 ## Future Considerations (Phase 2 Twitch Support)
 
 - Twitch API or GraphQL schema research tools.
