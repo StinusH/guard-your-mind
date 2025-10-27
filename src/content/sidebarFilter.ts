@@ -1,3 +1,4 @@
+import type { BlockingStyle } from "../shared/settings";
 import type { ShadowHost } from "../shared/dom";
 import {
   filterSidebarContent,
@@ -13,6 +14,7 @@ type SidebarFilterDependencies = {
   isBlockingEnabled: () => boolean;
   extractSubredditFromHref: (href: string) => string | null;
   createSidebarPlaceholder: (subreddit: string) => HTMLElement;
+  getBlockingStyle: () => BlockingStyle;
   isDebugEnabled: () => boolean;
   log: (...args: unknown[]) => void;
 };
@@ -31,6 +33,7 @@ export function createSidebarFilter(deps: SidebarFilterDependencies): SidebarFil
     isBlockingEnabled,
     extractSubredditFromHref,
     createSidebarPlaceholder,
+    getBlockingStyle,
     isDebugEnabled,
     log,
   } = deps;
@@ -59,6 +62,7 @@ export function createSidebarFilter(deps: SidebarFilterDependencies): SidebarFil
     extractSubredditFromHref,
     createSidebarPlaceholder,
     isBlockingEnabled,
+    getBlockingStyle,
     isDebugEnabled,
     debugLog,
   });

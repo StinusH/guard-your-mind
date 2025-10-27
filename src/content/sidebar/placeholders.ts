@@ -1,4 +1,6 @@
 const ORIGINAL_DISPLAY_DATA_KEY = "gymOriginalDisplay";
+const ORIGINAL_ITEM_DISPLAY_DATA_KEY = "gymOriginalItemDisplay";
+const HIDDEN_ITEM_FLAG = "gymHiddenItem";
 
 export type SidebarPlaceholderConfig = {
   blankedClass: string;
@@ -27,6 +29,36 @@ export const showSidebarLink = (link: HTMLAnchorElement): void => {
   delete link.dataset[ORIGINAL_DISPLAY_DATA_KEY];
 };
 
+export const hideSidebarItem = (listItem: HTMLElement): void => {
+  if (!listItem.dataset[HIDDEN_ITEM_FLAG]) {
+    listItem.dataset[ORIGINAL_ITEM_DISPLAY_DATA_KEY] = listItem.style.display || "";
+  }
+
+  listItem.dataset[HIDDEN_ITEM_FLAG] = "true";
+  listItem.style.setProperty("display", "none", "important");
+  listItem.setAttribute("aria-hidden", "true");
+};
+
+export const showSidebarItem = (listItem: HTMLElement): void => {
+  if (!listItem.dataset[HIDDEN_ITEM_FLAG]) {
+    return;
+  }
+
+  const originalDisplay = listItem.dataset[ORIGINAL_ITEM_DISPLAY_DATA_KEY] ?? "";
+  if (originalDisplay) {
+    listItem.style.display = originalDisplay;
+  } else {
+    listItem.style.removeProperty("display");
+  }
+
+  listItem.removeAttribute("aria-hidden");
+  delete listItem.dataset[ORIGINAL_ITEM_DISPLAY_DATA_KEY];
+  delete listItem.dataset[HIDDEN_ITEM_FLAG];
+};
+
+export const isSidebarItemHidden = (listItem: HTMLElement): boolean =>
+  listItem.dataset[HIDDEN_ITEM_FLAG] === "true";
+
 export const applySidebarPlaceholderToItem = (
   listItem: HTMLElement,
   link: HTMLAnchorElement | null,
@@ -34,6 +66,8 @@ export const applySidebarPlaceholderToItem = (
   config: SidebarPlaceholderConfig,
   createSidebarPlaceholder: (subreddit: string) => HTMLElement,
 ): void => {
+  showSidebarItem(listItem);
+
   const normalized = subreddit.toLowerCase();
   const existingSubreddit = listItem.getAttribute("data-blocked-subreddit");
 
@@ -77,6 +111,8 @@ export const clearSidebarPlaceholderFromItem = (
   link: HTMLAnchorElement | null,
   config: SidebarPlaceholderConfig,
 ): void => {
+  showSidebarItem(listItem);
+
   if (!listItem.classList.contains(config.placeholderClass)) {
     return;
   }

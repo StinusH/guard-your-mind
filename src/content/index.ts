@@ -16,6 +16,7 @@ import {
   areObserversInitialized,
   blockedSubreddits,
   flushBlockedSubredditPersistence,
+  getBlockingStyle,
   isBlockingEnabled,
   loadStoredBlockedSubreddits,
   markObserversInitialized,
@@ -44,6 +45,7 @@ const sidebarFilter = createSidebarFilter({
   isBlockingEnabled,
   extractSubredditFromHref,
   createSidebarPlaceholder,
+  getBlockingStyle,
   isDebugEnabled: () => CONFIG.debugMode,
   log,
 });

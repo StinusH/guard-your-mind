@@ -1,7 +1,12 @@
 import type { ShadowHost } from "../../shared/dom";
+import type { BlockingStyle } from "../../shared/settings";
 import {
   applySidebarPlaceholderToItem,
   clearSidebarPlaceholderFromItem,
+  hideSidebarItem,
+  hideSidebarLink,
+  isSidebarItemHidden,
+  showSidebarItem,
   showSidebarLink,
   type SidebarPlaceholderConfig,
 } from "./placeholders";
@@ -27,6 +32,7 @@ type FilterContext = {
   isBlockingEnabled: () => boolean;
   isDebugEnabled: () => boolean;
   debugLog: (...args: unknown[]) => void;
+  getBlockingStyle: () => BlockingStyle;
 };
 
 type ProcessedItem = {
@@ -123,6 +129,7 @@ export const filterSidebarContent = (
 
   const processedItems = collectProcessedItems(shadowRoot, mode, context);
   const handledBlocked = new Set<string>();
+  const blockingStyle = context.getBlockingStyle();
 
   for (let index = 0; index < processedItems.length; index += 1) {
     const { listItem, link, source } = processedItems[index];
@@ -140,6 +147,18 @@ export const filterSidebarContent = (
           href,
           hasPlaceholder,
         });
+      }
+
+      if (blockingStyle === "remove") {
+        if (hasPlaceholder) {
+          clearSidebarPlaceholderFromItem(listItem, link ?? null, context.config);
+        }
+        hideSidebarItem(listItem);
+        if (link) {
+          hideSidebarLink(link);
+        }
+        handledBlocked.add(normalized);
+        continue;
       }
 
       const isFirstOccurrence = !handledBlocked.has(normalized);
@@ -173,6 +192,10 @@ export const filterSidebarContent = (
       clearSidebarPlaceholderFromItem(listItem, link ?? null, context.config);
     } else if (link && link.dataset) {
       showSidebarLink(link);
+    }
+
+    if (isSidebarItemHidden(listItem)) {
+      showSidebarItem(listItem);
     }
 
     if (!extracted && href && context.isDebugEnabled()) {
