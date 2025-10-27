@@ -74,7 +74,7 @@ const restoreSnapshot = (snapshot: BlockSnapshot): void => {
   }
 
   if (original instanceof HTMLElement) {
-    original.classList.remove(CONFIG.blankedClass, CONFIG.blurredClass);
+    original.classList.remove(CONFIG.blankedClass);
   }
 };
 

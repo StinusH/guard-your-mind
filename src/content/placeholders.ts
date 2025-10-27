@@ -1,7 +1,6 @@
 import { CONFIG, QUOTES } from "./config";
 
 let quoteIndex = 0;
-let blurStylesInjected = false;
 
 const getNextQuote = (): string => {
   const quote = QUOTES[quoteIndex % QUOTES.length];
@@ -50,55 +49,4 @@ export function createQuotePlaceholder(originalElement: Element): HTMLDivElement
     </div>
   `;
   return placeholder;
-}
-
-export function ensureBlurStylesInjected(): void {
-  if (blurStylesInjected) {
-    return;
-  }
-
-  const style = document.createElement("style");
-  style.textContent = `
-    .${CONFIG.blurredClass} {
-      position: relative !important;
-      filter: blur(6px) saturate(0.4);
-      border-radius: inherit;
-      overflow: hidden;
-    }
-
-    .${CONFIG.blurredClass}::after {
-      content: "Blurred by Guard Your Mind";
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(17, 24, 39, 0.55);
-      color: #f9fafb;
-      font-size: 14px;
-      font-weight: 600;
-      text-align: center;
-      padding: 16px;
-      pointer-events: none;
-    }
-  `;
-
-  const target = document.head ?? document.documentElement ?? document.body;
-  if (target) {
-    target.appendChild(style);
-    blurStylesInjected = true;
-  }
-}
-
-export function blurElement(element: Element): void {
-  ensureBlurStylesInjected();
-  const target = element as HTMLElement;
-  target.classList.add(CONFIG.blankedClass, CONFIG.blurredClass);
-}
-
-export function clearBlurredElements(): void {
-  document.querySelectorAll(`.${CONFIG.blurredClass}`).forEach((element) => {
-    element.classList.remove(CONFIG.blurredClass);
-    element.classList.remove(CONFIG.blankedClass);
-  });
 }

@@ -2,7 +2,6 @@ import type { ExtensionSettings } from "../shared/settings";
 import { getSettings, subscribeToSettings } from "../shared/settings";
 import { CONFIG, SELECTORS } from "./config";
 import {
-  clearBlurredContent,
   createSidebarPlaceholder,
   filterSearchResults,
   processPage,
@@ -161,12 +160,8 @@ function init(): void {
   });
 }
 
-const resetBlockedContent = (previousStyle?: ExtensionSettings["blockingStyle"]): void => {
-  if (previousStyle === "blur") {
-    clearBlurredContent();
-  } else {
-    restoreBlockedElements();
-  }
+const resetBlockedContent = (): void => {
+  restoreBlockedElements();
 };
 
 const handleSettingsUpdate = (settings: ExtensionSettings): void => {
@@ -179,7 +174,7 @@ const handleSettingsUpdate = (settings: ExtensionSettings): void => {
   if (settings.blockingEnabled) {
     ensureInitialized();
     if (shouldReprocess) {
-      resetBlockedContent(previousStyle);
+      resetBlockedContent();
       processPage();
       sidebarFilter.resetState();
       sidebarFilter.triggerRefresh();
@@ -189,11 +184,7 @@ const handleSettingsUpdate = (settings: ExtensionSettings): void => {
     }
   } else if (wasBlocking) {
     log("Guard Your Mind blocking disabled via settings");
-    resetBlockedContent(previousStyle);
-  }
-
-  if (previousStyle === "blur" && settings.blockingStyle !== "blur") {
-    clearBlurredContent();
+    resetBlockedContent();
   }
 };
 

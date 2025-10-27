@@ -51,9 +51,4 @@ export const BLOCKING_STYLE_OPTIONS: BlockingStyleOption[] = [
     label: "Motivational quotes",
     description: "Shows a short inspirational quote instead of the content.",
   },
-  {
-    value: "blur",
-    label: "Blur in place",
-    description: "Keeps the content but heavily blurs it with an overlay.",
-  },
 ];

@@ -4,6 +4,7 @@ import {
   getBlockedSubreddits,
   setBlockedSubreddits,
   subscribeToBlockedSubreddits,
+  sanitizeBlockingStyle,
 } from "../shared/settings";
 import { CONFIG } from "./config";
 import { log } from "./logger";
@@ -61,7 +62,7 @@ export const flushBlockedSubredditPersistence = (): void => {
 
 export const isBlockingEnabled = (): boolean => extensionSettings.blockingEnabled;
 export const getBlockingStyle = (): BlockingStyle =>
-  extensionSettings.blockingStyle ?? "placeholder";
+  sanitizeBlockingStyle(extensionSettings.blockingStyle);
 export const shouldBlock18Plus = (): boolean => extensionSettings.block18PlusContent !== false;
 
 export const areObserversInitialized = (): boolean => observersInitialized;

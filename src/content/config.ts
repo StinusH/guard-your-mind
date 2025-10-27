@@ -2,7 +2,6 @@ export const CONFIG = {
   debugMode: true,
   blankedClass: "gym-blanked",
   placeholderClass: "gym-placeholder",
-  blurredClass: "gym-blurred",
 };
 
 export const SELECTORS = {

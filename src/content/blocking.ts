@@ -1,12 +1,7 @@
 import type { BlockingStyle } from "../shared/settings";
 import { CONFIG, SELECTORS } from "./config";
 import { isMaturePost, isMatureSearchResult, isMatureSubreddit } from "./detection";
-import {
-  createPlaceholder,
-  createQuotePlaceholder,
-  blurElement,
-  clearBlurredElements,
-} from "./placeholders";
+import { createPlaceholder, createQuotePlaceholder } from "./placeholders";
 import { registerBlockedElement, restoreBlockedElements } from "./blockedElements";
 import { getBlockingStyle, isBlockingEnabled } from "./state";
 
@@ -19,10 +14,6 @@ export const applyBlockingToElement = (element: Element, factory?: PlaceholderFa
     case "remove": {
       registerBlockedElement(element, style, null);
       element.remove();
-      break;
-    }
-    case "blur": {
-      blurElement(element);
       break;
     }
     case "quotes": {
@@ -110,10 +101,6 @@ export const processPage = (): void => {
   } else {
     blankMaturePosts();
   }
-};
-
-export const clearBlurredContent = (): void => {
-  clearBlurredElements();
 };
 
 export { restoreBlockedElements };
