@@ -224,9 +224,6 @@ export function createSidebarFilter(deps: SidebarFilterDependencies): SidebarFil
             selectors.shadowDOM.communityItemLink ?? "a[href]",
           ) ?? communityItem.querySelector<HTMLAnchorElement>("a[href]");
 
-        if (!link && communityItem.id && isDebugEnabled()) {
-          debugLog(`Community item ${communityItem.id} missing link element`);
-        }
         addProcessedItem(listItem ?? communityItem, link ?? null, "community");
       });
     }
@@ -264,11 +261,6 @@ export function createSidebarFilter(deps: SidebarFilterDependencies): SidebarFil
           applySidebarPlaceholderToItem(listItem, link ?? null, displayName);
         }
         continue;
-      } else if (isDebugEnabled() && source === "community") {
-        debugLog(`Skipping community entry ${displayName} (blocked=${isBlocked})`, {
-          href,
-          normalized,
-        });
       }
 
       if (hasPlaceholder) {

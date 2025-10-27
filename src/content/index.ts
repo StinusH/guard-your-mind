@@ -62,6 +62,48 @@ const hasTruthyAttribute = (element: Element, attributeName: string): boolean =>
   return normalized === "" || normalized === "true" || normalized === attributeName.toLowerCase();
 };
 
+const hasTruthyShredditAttribute = (
+  element: Element | null,
+  attributeNames: string[],
+  treatNullValue = true,
+  normalizeName?: (name: string) => string,
+): boolean => {
+  if (!element) {
+    return false;
+  }
+
+  for (const attributeName of attributeNames) {
+    const normalizedName = normalizeName ? normalizeName(attributeName) : attributeName;
+    if (!element.hasAttribute(normalizedName)) {
+      continue;
+    }
+
+    const rawValue = element.getAttribute(normalizedName);
+    if (rawValue === null) {
+      if (treatNullValue) {
+        return true;
+      }
+      continue;
+    }
+
+    const normalized = rawValue.trim().toLowerCase();
+    if (
+      !normalized ||
+      normalized === "true" ||
+      normalized === "null" ||
+      normalized === attributeName.toLowerCase()
+    ) {
+      return true;
+    }
+
+    if (normalized === "false" || normalized === "0") {
+      continue;
+    }
+  }
+
+  return false;
+};
+
 /**
  * Normalizes a potential hostname, stripping protocols and www.
  */
@@ -192,6 +234,16 @@ const SELECTORS = {
       ".Post",
       "shreddit-post",
     ],
+    subredditHeader: [
+      ".masthead",
+      "shreddit-subreddit-header",
+      "reddit-subreddit-header",
+      '[data-testid="subreddit-banner"]',
+      '[data-testid="subreddit-description"]',
+      ".community-banner",
+      ".community-description",
+      ".subreddit-description",
+    ],
     // Individual post selectors
     posts: [
       "shreddit-post",
@@ -231,6 +283,8 @@ const SELECTORS = {
 
 // Track blocked subreddits (in-memory only, resets on page reload)
 const blockedSubreddits = new Set<string>();
+const nsfwSubredditCache = new Map<string, boolean>();
+const pendingSubredditChecks = new Map<string, Promise<void>>();
 
 // Logging utility
 function log(...args: unknown[]): void {
@@ -251,6 +305,57 @@ const schedulePersistBlockedSubreddits = (): void => {
       console.error("Guard Your Mind failed to persist blocked subreddits", error);
     });
   }, 100);
+};
+
+type SubredditAboutResponse = {
+  data?: {
+    over18?: boolean;
+    over_18?: boolean;
+  };
+};
+
+const scheduleSubredditMetadataCheck = (subreddit: string, block18Plus: boolean): void => {
+  if (!block18Plus) {
+    return;
+  }
+
+  const normalized = subreddit.toLowerCase();
+  if (
+    blockedSubreddits.has(normalized) ||
+    pendingSubredditChecks.has(normalized) ||
+    nsfwSubredditCache.has(normalized)
+  ) {
+    return;
+  }
+
+  const metadataPromise = fetch(`/r/${encodeURIComponent(normalized)}/about.json`, {
+    credentials: "same-origin",
+  })
+    .then<SubredditAboutResponse | null>((response) => {
+      if (!response.ok) {
+        return null;
+      }
+      return response.json() as Promise<SubredditAboutResponse>;
+    })
+    .then((payload) => {
+      const isOver18 = Boolean(payload?.data?.over18 ?? payload?.data?.over_18);
+      nsfwSubredditCache.set(normalized, isOver18);
+
+      if (isOver18 && !blockedSubreddits.has(normalized)) {
+        trackCurrentSubreddit("subreddit metadata", normalized);
+        processPage();
+      }
+    })
+    .catch((error) => {
+      if (CONFIG.debugMode) {
+        console.warn("Guard Your Mind failed to fetch subreddit metadata", normalized, error);
+      }
+    })
+    .finally(() => {
+      pendingSubredditChecks.delete(normalized);
+    });
+
+  pendingSubredditChecks.set(normalized, metadataPromise);
 };
 
 const sidebarFilter = createSidebarFilter({
@@ -353,12 +458,26 @@ function isMatureSubreddit(): boolean {
 
   // Check shreddit-app element (new Reddit)
   const shredditApp = document.querySelector(SELECTORS.mature.subreddit.app);
-  const appRouteIsNSFW = shredditApp?.getAttribute("routeisnsfw") === "true";
-  if (appRouteIsNSFW) {
+  const hasRouteNSFWFlag = hasTruthyShredditAttribute(shredditApp, [
+    "routeisnsfw",
+    "route-is-nsfw",
+    "data-routeisnsfw",
+    "data-route-is-nsfw",
+  ]);
+  if (hasRouteNSFWFlag) {
     trackCurrentSubreddit("shreddit-app attributes");
     return true;
   }
-  if (block18Plus && shredditApp?.getAttribute("over18") === "true") {
+  const hasOver18Flag =
+    block18Plus &&
+    hasTruthyShredditAttribute(shredditApp, [
+      "over18",
+      "over-18",
+      "data-over18",
+      "data-over-18",
+      "data-subreddit-over18",
+    ]);
+  if (hasOver18Flag) {
     trackCurrentSubreddit("shreddit-app attributes");
     return true;
   }
@@ -388,6 +507,18 @@ function isMatureSubreddit(): boolean {
     return true;
   }
 
+  if (currentSubreddit) {
+    const cachedNSFW = nsfwSubredditCache.get(currentSubreddit);
+    if (cachedNSFW && !blockedSubreddits.has(currentSubreddit)) {
+      trackCurrentSubreddit("subreddit metadata cache", currentSubreddit);
+      return true;
+    }
+
+    if (cachedNSFW === undefined) {
+      scheduleSubredditMetadataCheck(currentSubreddit, block18Plus);
+    }
+  }
+
   return false;
 }
 
@@ -395,10 +526,10 @@ function isMatureSubreddit(): boolean {
  * Tracks the current subreddit as blocked if we're on a subreddit page
  * Triggers sidebar filtering to block it from recent pages
  */
-function trackCurrentSubreddit(reason: string): void {
-  const match = location.pathname.match(/^\/r\/([^/]+)/);
+function trackCurrentSubreddit(reason: string, explicitSubreddit?: string): void {
+  const match = explicitSubreddit ?? location.pathname.match(/^\/r\/([^/]+)/)?.[1];
   if (match) {
-    const subreddit = match[1].toLowerCase();
+    const subreddit = match.toLowerCase();
     const wasNew = !blockedSubreddits.has(subreddit);
     blockedSubreddits.add(subreddit);
 
@@ -413,7 +544,7 @@ function trackCurrentSubreddit(reason: string): void {
       log(`Subreddit "${subreddit}" already tracked (triggered by ${reason}).`);
       sidebarFilter.triggerRefresh();
     }
-  } else {
+  } else if (CONFIG.debugMode) {
     log(
       `trackCurrentSubreddit invoked via ${reason} but no subreddit matched in location.pathname "${location.pathname}"`,
     );
@@ -754,7 +885,9 @@ function blankElement(element: Element): void {
  * Targets main content containers for both new and old Reddit
  */
 function blankSubreddit(): void {
-  SELECTORS.containers.feed.forEach((selector) => {
+  const selectorsToBlank = [...SELECTORS.containers.feed, ...SELECTORS.containers.subredditHeader];
+
+  selectorsToBlank.forEach((selector) => {
     const container = document.querySelector(selector);
     if (container) {
       blankElement(container);
