@@ -160,14 +160,6 @@ export const createRecentSearchPlaceholder = (): HTMLElement => {
   const style = getBlockingStyle();
 
   if (style === "quotes" || style === "bible") {
-    const heading = document.createElement("div");
-    heading.textContent = "Guard Your Mind";
-    heading.style.cssText = `
-      font-weight: 600;
-      font-size: 13px;
-      opacity: 0.85;
-    `;
-
     const quoteLine = document.createElement("div");
     quoteLine.textContent = style === "quotes" ? `“${getRandomQuote()}”` : getRandomBibleQuote();
     quoteLine.style.cssText = `
@@ -183,7 +175,7 @@ export const createRecentSearchPlaceholder = (): HTMLElement => {
       opacity: 0.65;
     `;
 
-    placeholder.append(heading, quoteLine, status);
+    placeholder.append(quoteLine, status);
     return placeholder;
   }
 
