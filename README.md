@@ -70,7 +70,7 @@ Use the `:fix` variants (`npm run lint:fix`, `npm run format:fix`) to apply safe
 
 ## Releases
 
-When sharing a packaged build, zip the contents of `dist/` after running `npm run build` and attach it to a GitHub release so others can install it manually.
+Tagging the repo (e.g., `git tag v0.1.0 && git push origin v0.1.0`) automatically triggers the release workflow in `.github/workflows/release.yml`, which builds the extension, packages `dist/`, and uploads a versioned zip to the GitHub release page.
 
 ## License
 
