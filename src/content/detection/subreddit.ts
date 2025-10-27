@@ -8,68 +8,248 @@ import {
   trackCurrentSubreddit,
 } from "../state";
 
-type SubredditAboutResponse = {
-  data?: {
-    over18?: boolean;
-    over_18?: boolean;
-  };
+type CommunityAboutResponse = {
+  data?: Record<string, unknown>;
 };
 
-const scheduleSubredditMetadataCheck = (subreddit: string, block18Plus: boolean): void => {
+type CommunityType = "subreddit" | "user";
+
+type CommunityContext = {
+  type: CommunityType;
+  name: string;
+  normalized: string;
+  storageKey: string;
+  aboutPath: string;
+};
+
+const COMMUNITY_ROUTE_PATTERNS: Array<{ type: CommunityType; regex: RegExp }> = [
+  { type: "subreddit", regex: /^\/r\/([^/]+)/i },
+  { type: "user", regex: /^\/user\/([^/]+)/i },
+  { type: "user", regex: /^\/u\/([^/]+)/i },
+];
+
+const NSFW_FLAG_KEYS = ["isNsfw", "isNSFW", "is_nsfw", "nsfw", "isAdult"];
+const OVER18_FLAG_KEYS = ["over18", "over_18", "isOver18", "is_over_18", "isAdult"];
+
+const decodeHtmlEntities = (value: string): string =>
+  value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+
+const hasTrueFlag = (candidate: Record<string, unknown>, keys: string[]): boolean =>
+  keys.some((key) => candidate[key] === true);
+
+const extractBooleanFlag = (input: unknown, block18Plus: boolean): boolean => {
+  if (!input || typeof input !== "object") {
+    return false;
+  }
+
+  const candidate = input as Record<string, unknown>;
+
+  if (hasTrueFlag(candidate, NSFW_FLAG_KEYS)) {
+    return true;
+  }
+
   if (!block18Plus) {
+    return false;
+  }
+
+  return hasTrueFlag(candidate, OVER18_FLAG_KEYS);
+};
+
+const extractFlagFromPayload = (
+  payload: CommunityAboutResponse | null,
+  block18Plus: boolean,
+): boolean => {
+  if (!payload?.data || typeof payload.data !== "object" || payload.data === null) {
+    return false;
+  }
+
+  const data = payload.data as Record<string, unknown>;
+  if (extractBooleanFlag(data, block18Plus)) {
+    return true;
+  }
+
+  const nestedCandidates: unknown[] = [];
+
+  if (typeof data.profile === "object" && data.profile) {
+    nestedCandidates.push(data.profile);
+  }
+
+  if (typeof data.subreddit === "object" && data.subreddit) {
+    nestedCandidates.push(data.subreddit);
+  }
+
+  return nestedCandidates.some((candidate) => extractBooleanFlag(candidate, block18Plus));
+};
+
+const decodePathSegment = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+const buildCommunityContext = (): CommunityContext | null => {
+  for (const { type, regex } of COMMUNITY_ROUTE_PATTERNS) {
+    const match = location.pathname.match(regex);
+    if (!match) {
+      continue;
+    }
+
+    const raw = match[1];
+    const decoded = decodePathSegment(raw).trim();
+    if (!decoded) {
+      continue;
+    }
+
+    const normalized = decoded.toLowerCase();
+    const storageKey = type === "subreddit" ? normalized : `user:${normalized}`;
+    const aboutPath =
+      type === "subreddit"
+        ? `/r/${encodeURIComponent(normalized)}/about.json`
+        : `/user/${encodeURIComponent(decoded)}/about.json`;
+
+    return {
+      type,
+      name: decoded,
+      normalized,
+      storageKey,
+      aboutPath,
+    };
+  }
+
+  return null;
+};
+
+const redditPageDataIndicatesAdult = (block18Plus: boolean): boolean => {
+  const pageDataElements = document.querySelectorAll<HTMLElement>("reddit-page-data[data]");
+  for (const element of Array.from(pageDataElements)) {
+    const encoded = element.getAttribute("data");
+    if (!encoded) {
+      continue;
+    }
+
+    const decoded = decodeHtmlEntities(encoded);
+
+    try {
+      const parsed = JSON.parse(decoded);
+      if (!parsed || typeof parsed !== "object") {
+        continue;
+      }
+
+      const containers: unknown[] = [parsed];
+      const parsedRecord = parsed as Record<string, unknown>;
+
+      if (typeof parsedRecord.profile === "object" && parsedRecord.profile) {
+        containers.push(parsedRecord.profile);
+      }
+
+      if (typeof parsedRecord.subreddit === "object" && parsedRecord.subreddit) {
+        containers.push(parsedRecord.subreddit);
+      }
+
+      if (containers.some((candidate) => extractBooleanFlag(candidate, block18Plus))) {
+        return true;
+      }
+    } catch {
+      if (decoded.includes('"isNsfw":true') || decoded.includes('"isNSFW":true')) {
+        return true;
+      }
+
+      if (
+        block18Plus &&
+        (decoded.includes('"over18":true') ||
+          decoded.includes('"over_18":true') ||
+          decoded.includes('"isOver18":true') ||
+          decoded.includes('"isAdult":true'))
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+const scheduleCommunityMetadataCheck = (
+  community: CommunityContext,
+  block18Plus: boolean,
+): void => {
+  if (!block18Plus && community.type !== "user") {
     return;
   }
 
-  const normalized = subreddit.toLowerCase();
+  const cacheKey = community.storageKey;
+
   if (
-    blockedSubreddits.has(normalized) ||
-    pendingSubredditChecks.has(normalized) ||
-    nsfwSubredditCache.has(normalized)
+    blockedSubreddits.has(cacheKey) ||
+    pendingSubredditChecks.has(cacheKey) ||
+    nsfwSubredditCache.has(cacheKey)
   ) {
     return;
   }
 
-  const metadataPromise = fetch(`/r/${encodeURIComponent(normalized)}/about.json`, {
+  const metadataPromise = fetch(community.aboutPath, {
     credentials: "same-origin",
   })
-    .then<SubredditAboutResponse | null>((response) => {
+    .then<CommunityAboutResponse | null>((response) => {
       if (!response.ok) {
         return null;
       }
-      return response.json() as Promise<SubredditAboutResponse>;
+      return response.json() as Promise<CommunityAboutResponse>;
     })
     .then((payload) => {
-      const isOver18 = Boolean(payload?.data?.over18 ?? payload?.data?.over_18);
-      nsfwSubredditCache.set(normalized, isOver18);
+      const isAdultContent = extractFlagFromPayload(payload, block18Plus);
+      nsfwSubredditCache.set(cacheKey, isAdultContent);
 
-      if (isOver18 && !blockedSubreddits.has(normalized)) {
-        trackCurrentSubreddit("subreddit metadata", normalized);
+      if (isAdultContent && community.type === "subreddit") {
+        trackCurrentSubreddit("subreddit metadata", community.storageKey);
       }
     })
     .catch((error) => {
       if (CONFIG.debugMode) {
-        console.warn("Guard Your Mind failed to fetch subreddit metadata", normalized, error);
+        console.warn(
+          "Guard Your Mind failed to fetch community metadata",
+          community.storageKey,
+          error,
+        );
       }
     })
     .finally(() => {
-      pendingSubredditChecks.delete(normalized);
+      pendingSubredditChecks.delete(cacheKey);
     });
 
-  pendingSubredditChecks.set(normalized, metadataPromise);
+  pendingSubredditChecks.set(cacheKey, metadataPromise);
 };
 
 export const isMatureSubreddit = (): boolean => {
   const block18Plus = shouldBlock18Plus();
+  const community = buildCommunityContext();
 
-  const manualMatch = location.pathname.match(/^\/r\/([^/]+)/i);
-  const currentSubreddit = manualMatch ? manualMatch[1].toLowerCase() : null;
-  if (currentSubreddit && blockedSubreddits.has(currentSubreddit)) {
+  const trackSubreddit = (reason: string): void => {
+    if (community?.type === "subreddit") {
+      trackCurrentSubreddit(reason, community.storageKey);
+    }
+  };
+
+  if (community?.type === "subreddit" && blockedSubreddits.has(community.storageKey)) {
+    return true;
+  }
+
+  if (community && redditPageDataIndicatesAdult(block18Plus)) {
+    nsfwSubredditCache.set(community.storageKey, true);
+    trackSubreddit("reddit-page-data flag");
     return true;
   }
 
   const body = document.body;
   if (block18Plus && (body?.dataset.over18 === "true" || body?.dataset.isOver18 === "true")) {
-    trackCurrentSubreddit("body dataset flag");
+    trackSubreddit("body dataset flag");
     return true;
   }
 
@@ -81,9 +261,10 @@ export const isMatureSubreddit = (): boolean => {
     "data-route-is-nsfw",
   ]);
   if (hasRouteNSFWFlag) {
-    trackCurrentSubreddit("shreddit-app attributes");
+    trackSubreddit("shreddit-app attributes");
     return true;
   }
+
   const hasOver18Flag =
     block18Plus &&
     hasTruthyShredditAttribute(shredditApp, [
@@ -93,8 +274,9 @@ export const isMatureSubreddit = (): boolean => {
       "data-over-18",
       "data-subreddit-over18",
     ]);
+
   if (hasOver18Flag) {
-    trackCurrentSubreddit("shreddit-app attributes");
+    trackSubreddit("shreddit-app attributes");
     return true;
   }
 
@@ -106,30 +288,32 @@ export const isMatureSubreddit = (): boolean => {
     const is18Badge = badgeIcon.includes("18") || badgeText.includes("18+");
 
     if (isNSFWBadge || (block18Plus && is18Badge)) {
-      trackCurrentSubreddit("subreddit header badge");
+      trackSubreddit("subreddit header badge");
       return true;
     }
   }
 
   const pageTitle = document.title.toLowerCase();
   if (pageTitle.includes("nsfw")) {
-    trackCurrentSubreddit("page title hint");
+    trackSubreddit("page title hint");
     return true;
   }
   if (block18Plus && pageTitle.includes("18+")) {
-    trackCurrentSubreddit("page title hint");
+    trackSubreddit("page title hint");
     return true;
   }
 
-  if (currentSubreddit) {
-    const cachedNSFW = nsfwSubredditCache.get(currentSubreddit);
-    if (cachedNSFW && !blockedSubreddits.has(currentSubreddit)) {
-      trackCurrentSubreddit("subreddit metadata cache", currentSubreddit);
+  if (community) {
+    const cachedNSFW = nsfwSubredditCache.get(community.storageKey);
+    if (cachedNSFW) {
+      if (community.type === "subreddit") {
+        trackSubreddit("subreddit metadata cache");
+      }
       return true;
     }
 
     if (cachedNSFW === undefined) {
-      scheduleSubredditMetadataCheck(currentSubreddit, block18Plus);
+      scheduleCommunityMetadataCheck(community, block18Plus);
     }
   }
 
