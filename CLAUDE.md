@@ -99,7 +99,7 @@ Implementation details:
 ### Storage & State
 
 - Use `chrome.storage.sync` when available (falls back to local)
-- Stored settings include: `blockingEnabled`, `blockingStyle`, `showBlockedCounter`, `block18PlusContent`
+- Stored settings include: `blockingEnabled`, `blockingStyle`, `block18PlusContent`
 - `ALWAYS_BLOCKED_DOMAINS` in `src/shared/settings.ts` defines hard-coded domains that are always blanked
 - `subscribeToBlockedSubreddits` exposes storage updates for the manual/auto blocked list
 - Persist blocked subreddit visits to `chrome.storage.local` (`getBlockedSubreddits` / `setBlockedSubreddits`) to keep sidebar filtering consistent across refreshes
@@ -154,14 +154,14 @@ Implementation details:
 - ✅ SPA navigation detection (re-initializes filters on page changes)
 - ✅ Persistent tracking of blocked subreddits using `chrome.storage.local`
 - ✅ User-selectable handling of 18+ tagged posts and subreddits (popup toggle, enabled by default)
-- ✅ Popup settings with persistent enable toggle and blocking style selection
+- ✅ Popup settings with blocking style selection and 18+ toggle, blocking always on
 - ✅ Configurable blocking modes (placeholder/remove/quotes/blur)
 - ✅ Production-ready code (optimized, documented, tested)
 
 ### Known Limitations
 
 - Blocked subreddit list is stored locally; it does not sync across browser profiles/devices yet
-- Blocked counter preference exists, but counter telemetry is not yet wired to UI
+- Blocked counter is not yet surfaced in the popup UI
 - Switching blocking styles does not retroactively restore previously blanked/removed DOM (requires refresh)
 
 ### Next Steps

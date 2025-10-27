@@ -14,14 +14,12 @@ export const sanitizeBlockingStyle = (value: unknown): BlockingStyle => {
 export interface ExtensionSettings {
   blockingEnabled: boolean;
   blockingStyle: BlockingStyle;
-  showBlockedCounter: boolean;
   block18PlusContent: boolean;
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   blockingEnabled: true,
   blockingStyle: "placeholder",
-  showBlockedCounter: true,
   block18PlusContent: true,
 };
 
@@ -83,6 +81,22 @@ const normalizeSubredditList = (subreddits: string[]): string[] => {
   return Array.from(normalized).sort((a, b) => a.localeCompare(b));
 };
 
+type LegacyStoredSettings = Partial<ExtensionSettings> & {
+  showBlockedCounter?: unknown;
+};
+
+const sanitizeStoredSettings = (
+  value: LegacyStoredSettings | undefined,
+): Partial<ExtensionSettings> => {
+  if (!value) {
+    return {};
+  }
+
+  const sanitized: LegacyStoredSettings = { ...value };
+  delete sanitized.showBlockedCounter;
+  return sanitized as Partial<ExtensionSettings>;
+};
+
 export async function getSettings(): Promise<ExtensionSettings> {
   return new Promise((resolve, reject) => {
     storageArea.get(STORAGE_KEY, (result) => {
@@ -92,14 +106,15 @@ export async function getSettings(): Promise<ExtensionSettings> {
         return;
       }
 
-      const stored = result[STORAGE_KEY] as Partial<ExtensionSettings> | undefined;
+      const storedRaw = result[STORAGE_KEY] as LegacyStoredSettings | undefined;
+      const stored = sanitizeStoredSettings(storedRaw);
 
       const merged: ExtensionSettings = {
         ...DEFAULT_SETTINGS,
         ...stored,
       };
 
-      merged.blockingStyle = sanitizeBlockingStyle(stored?.blockingStyle);
+      merged.blockingStyle = sanitizeBlockingStyle(stored.blockingStyle);
       merged.blockingEnabled = true;
 
       resolve(merged);
@@ -110,8 +125,12 @@ export async function getSettings(): Promise<ExtensionSettings> {
 export async function setSettings(settings: ExtensionSettings): Promise<void> {
   return new Promise((resolve, reject) => {
     const nextSettings: ExtensionSettings = {
-      ...settings,
       blockingEnabled: true,
+      blockingStyle: sanitizeBlockingStyle(settings.blockingStyle),
+      block18PlusContent:
+        typeof settings.block18PlusContent === "boolean"
+          ? settings.block18PlusContent
+          : DEFAULT_SETTINGS.block18PlusContent,
     };
 
     storageArea.set({ [STORAGE_KEY]: nextSettings }, () => {
@@ -132,15 +151,15 @@ export function subscribeToSettings(callback: (settings: ExtensionSettings) => v
     }
 
     if (changes[STORAGE_KEY]) {
-      const stored =
-        (changes[STORAGE_KEY].newValue as Partial<ExtensionSettings> | undefined) ?? {};
+      const storedRaw = (changes[STORAGE_KEY].newValue as LegacyStoredSettings | undefined) ?? {};
+      const stored = sanitizeStoredSettings(storedRaw);
 
       const nextValue: ExtensionSettings = {
         ...DEFAULT_SETTINGS,
         ...stored,
       };
 
-      nextValue.blockingStyle = sanitizeBlockingStyle(stored?.blockingStyle);
+      nextValue.blockingStyle = sanitizeBlockingStyle(stored.blockingStyle);
       nextValue.blockingEnabled = true;
 
       callback(nextValue);

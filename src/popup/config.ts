@@ -1,6 +1,6 @@
 import type { BlockingStyle } from "../shared/settings";
 
-export type ToggleSettingKey = "block18PlusContent" | "showBlockedCounter";
+export type ToggleSettingKey = "block18PlusContent";
 
 export interface ToggleSettingField {
   key: ToggleSettingKey;
@@ -22,11 +22,6 @@ export const TOGGLE_FIELDS: ToggleSettingField[] = [
     description: "Include Reddit’s 18+ marker when deciding what to blank.",
     tooltip:
       "The 18+ tag covers all adult content on Reddit, including sexual imagery, nudity, and graphic violence.",
-  },
-  {
-    key: "showBlockedCounter",
-    label: "Show blocked counter",
-    description: "Display the number of blocked items in this popup.",
   },
 ];
 

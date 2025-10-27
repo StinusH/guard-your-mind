@@ -5,7 +5,7 @@
 - **`src/background`**: Service worker entry that coordinates lifecycle events and listens for settings updates.
 - **`src/content`**: Core detection logic that blanks mature Reddit content; toggle `debugMode` here when troubleshooting. Reads live preferences via `subscribeToSettings`.
 - **`src/content/sidebarFilter.ts`**: Encapsulates the sidebar “Recent” and “Communities” filtering logic with a reusable controller that manages Shadow DOM observers and placeholder application.
-- **`src/popup`**: Extension UI assets (`index.html`, `main.ts`, `style.css`) bundled by Vite. Hosts the enable toggle, blocking-style dropdown, and counter preference.
+- **`src/popup`**: Extension UI assets (`index.html`, `main.ts`, `style.css`) bundled by Vite. Hosts the blocking-style dropdown and the 18+ content toggle.
 - **`src/shared`**: Shared TypeScript utilities (e.g., `settings.ts`) that define `BlockingStyle`, defaults, and chrome.storage helpers used by popup/content modules.
 - **`scripts/fix-manifest.js`**: Post-build helper that adjusts the Chromium manifest; keep it in sync with `manifest.config.ts`.
 - **`dist/`**: Generated build output; never edit by hand.
@@ -21,7 +21,7 @@
 ## Extension Settings & Storage
 
 - Persist user preferences through the helpers in `src/shared/settings.ts` (`getSettings`, `setSettings`, `subscribeToSettings`).
-- Stored properties: `blockingEnabled`, `blockingStyle` (`placeholder | remove | quotes | blur`), `showBlockedCounter`, and `block18PlusContent`.
+- Stored properties: `blockingEnabled`, `blockingStyle` (`placeholder | remove | quotes | blur`), and `block18PlusContent`.
 - Content script should react to `blockingStyle` changes by adjusting blanking behavior (blur, quotes, remove) rather than duplicating state.
 - Visited NSFW subreddits are persisted via `getBlockedSubreddits` / `setBlockedSubreddits`, which write to `chrome.storage.local` so the blocked list survives refreshes.
 - Manually blocked subreddits can be managed from the popup (adds/removes persist to the same storage key and broadcast via `subscribeToBlockedSubreddits`).
