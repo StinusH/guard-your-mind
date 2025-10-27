@@ -20,7 +20,7 @@ Guard Your Mind is a Chromium extension that blanks explicit Reddit posts, comme
 
 ### Prerequisites
 
-- Node.js 18+ and npm.
+- Node.js 20.19+ and npm.
 
 ### Install dependencies
 
