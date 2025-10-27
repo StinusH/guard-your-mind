@@ -10,3 +10,8 @@ dist/
 .idea/
 .vscode/
 *.log
+
+# Documentation files
+CLAUDE.md
+AGENTS.md
+todo.md
