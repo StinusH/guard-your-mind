@@ -31,7 +31,7 @@ export const applyBlockingToElement = (element: Element, factory?: PlaceholderFa
     case "bible": {
       const placeholder = factory
         ? factory(element, style)
-        : createQuotePlaceholder(element, "Bible Verse", getRandomBibleQuote());
+        : createQuotePlaceholder(element, "Guard Your Mind", getRandomBibleQuote());
       placeholder.classList.add(CONFIG.blankedClass);
       registerBlockedElement(element, style, placeholder);
       element.replaceWith(placeholder);
@@ -143,20 +143,56 @@ export const createRecentSearchPlaceholder = (): HTMLElement => {
   const placeholder = document.createElement("div");
   placeholder.className = CONFIG.placeholderClass;
   placeholder.style.cssText = `
-    padding: 8px 16px;
+    padding: 10px 14px;
     background: #f6f7f8;
-    border-radius: 4px;
+    border-radius: 6px;
     margin: 2px 0;
-    color: #7c7c7c;
+    color: #4b4b4b;
     font-size: 12px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-sizing: border-box;
   `;
-  placeholder.innerHTML = `
-    <div style="font-weight: 500;">
-      🔒 Blocked recent search
-    </div>
+
+  const style = getBlockingStyle();
+
+  if (style === "quotes" || style === "bible") {
+    const heading = document.createElement("div");
+    heading.textContent = "Guard Your Mind";
+    heading.style.cssText = `
+      font-weight: 600;
+      font-size: 13px;
+      opacity: 0.85;
+    `;
+
+    const quoteLine = document.createElement("div");
+    quoteLine.textContent = style === "quotes" ? `“${getRandomQuote()}”` : getRandomBibleQuote();
+    quoteLine.style.cssText = `
+      font-size: 13px;
+      line-height: 1.4;
+      color: #333333;
+    `;
+
+    const status = document.createElement("div");
+    status.textContent = "🔒 Blocked recent search";
+    status.style.cssText = `
+      font-size: 11px;
+      opacity: 0.65;
+    `;
+
+    placeholder.append(heading, quoteLine, status);
+    return placeholder;
+  }
+
+  const status = document.createElement("div");
+  status.textContent = "🔒 Blocked recent search";
+  status.style.cssText = `
+    font-weight: 500;
   `;
+  placeholder.appendChild(status);
   return placeholder;
 };
 
