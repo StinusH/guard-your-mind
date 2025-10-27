@@ -51,4 +51,9 @@ export const BLOCKING_STYLE_OPTIONS: BlockingStyleOption[] = [
     label: "Motivational quotes",
     description: "Shows a short inspirational quote instead of the content.",
   },
+  {
+    value: "bible",
+    label: "Bible verses",
+    description: "Replaces content with an uplifting Bible verse.",
+  },
 ];

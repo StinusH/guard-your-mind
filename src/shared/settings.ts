@@ -1,7 +1,7 @@
-export type BlockingStyle = "placeholder" | "remove" | "quotes";
+export type BlockingStyle = "placeholder" | "remove" | "quotes" | "bible";
 
 const BLOCKING_STYLE_FALLBACK: BlockingStyle = "placeholder";
-const BLOCKING_STYLE_SET = new Set<BlockingStyle>(["placeholder", "remove", "quotes"]);
+const BLOCKING_STYLE_SET = new Set<BlockingStyle>(["placeholder", "remove", "quotes", "bible"]);
 
 export const sanitizeBlockingStyle = (value: unknown): BlockingStyle => {
   if (typeof value === "string" && BLOCKING_STYLE_SET.has(value as BlockingStyle)) {

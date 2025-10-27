@@ -2,6 +2,8 @@ import type { BlockingStyle } from "../shared/settings";
 import { CONFIG, SELECTORS } from "./config";
 import { isMaturePost, isMatureSearchResult, isMatureSubreddit } from "./detection";
 import { createPlaceholder, createQuotePlaceholder } from "./placeholders";
+import { getRandomQuote } from "./quotes";
+import { getRandomBibleQuote } from "./bibleQuotes";
 import { registerBlockedElement, restoreBlockedElements } from "./blockedElements";
 import { getBlockingStyle, isBlockingEnabled } from "./state";
 
@@ -17,7 +19,19 @@ export const applyBlockingToElement = (element: Element, factory?: PlaceholderFa
       break;
     }
     case "quotes": {
-      const placeholder = factory ? factory(element, style) : createQuotePlaceholder(element);
+      const quote = `“${getRandomQuote()}”`;
+      const placeholder = factory
+        ? factory(element, style)
+        : createQuotePlaceholder(element, "Guard Your Mind", quote);
+      placeholder.classList.add(CONFIG.blankedClass);
+      registerBlockedElement(element, style, placeholder);
+      element.replaceWith(placeholder);
+      break;
+    }
+    case "bible": {
+      const placeholder = factory
+        ? factory(element, style)
+        : createQuotePlaceholder(element, "Bible Verse", getRandomBibleQuote());
       placeholder.classList.add(CONFIG.blankedClass);
       registerBlockedElement(element, style, placeholder);
       element.replaceWith(placeholder);

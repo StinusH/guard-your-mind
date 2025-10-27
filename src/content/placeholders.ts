@@ -1,7 +1,11 @@
 import { CONFIG } from "./config";
-import { getRandomQuote } from "./quotes";
 
-export function createPlaceholder(originalElement: Element): HTMLDivElement {
+type BasePlaceholder = {
+  placeholder: HTMLDivElement;
+  contentWrapper: HTMLDivElement;
+};
+
+const createBasePlaceholder = (originalElement: Element): BasePlaceholder => {
   const placeholder = document.createElement("div");
   placeholder.className = CONFIG.placeholderClass;
 
@@ -34,6 +38,14 @@ export function createPlaceholder(originalElement: Element): HTMLDivElement {
     width: 100%;
   `;
 
+  placeholder.appendChild(contentWrapper);
+
+  return { placeholder, contentWrapper };
+};
+
+export function createPlaceholder(originalElement: Element): HTMLDivElement {
+  const { placeholder, contentWrapper } = createBasePlaceholder(originalElement);
+
   const headline = document.createElement("div");
   headline.textContent = "Content Blocked";
   headline.style.cssText = `
@@ -49,27 +61,19 @@ export function createPlaceholder(originalElement: Element): HTMLDivElement {
   `;
 
   contentWrapper.append(headline, subline);
-  placeholder.appendChild(contentWrapper);
-
   return placeholder;
 }
 
-export function createQuotePlaceholder(originalElement: Element): HTMLDivElement {
-  const placeholder = createPlaceholder(originalElement);
-  placeholder.replaceChildren();
-
-  const contentWrapper = document.createElement("div");
-  contentWrapper.style.cssText = `
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    align-items: center;
-    text-align: center;
-    width: 100%;
-  `;
+export function createQuotePlaceholder(
+  originalElement: Element,
+  heading: string,
+  quote: string,
+): HTMLDivElement {
+  const { placeholder, contentWrapper } = createBasePlaceholder(originalElement);
+  contentWrapper.style.gap = "10px";
 
   const headline = document.createElement("div");
-  headline.textContent = "Guard Your Mind";
+  headline.textContent = heading;
   headline.style.cssText = `
     font-weight: 600;
     font-size: 14px;
@@ -77,13 +81,12 @@ export function createQuotePlaceholder(originalElement: Element): HTMLDivElement
   `;
 
   const quoteText = document.createElement("div");
-  quoteText.textContent = `“${getRandomQuote()}”`;
+  quoteText.textContent = quote;
   quoteText.style.cssText = `
     font-size: 15px;
     line-height: 1.5;
   `;
 
   contentWrapper.append(headline, quoteText);
-  placeholder.appendChild(contentWrapper);
   return placeholder;
 }
