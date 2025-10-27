@@ -6,6 +6,7 @@ import {
   createSidebarPlaceholder,
   filterSearchResults,
   processPage,
+  restoreBlockedElements,
 } from "./blocking";
 import { log } from "./logger";
 import { setupShadowDOMWatcher } from "./shadowWatchers";
@@ -158,6 +159,14 @@ function init(): void {
   });
 }
 
+const resetBlockedContent = (previousStyle?: ExtensionSettings["blockingStyle"]): void => {
+  if (previousStyle === "blur") {
+    clearBlurredContent();
+  } else {
+    restoreBlockedElements();
+  }
+};
+
 const handleSettingsUpdate = (settings: ExtensionSettings): void => {
   const { wasBlocking, previousStyle, previousBlock18 } = updateExtensionSettings(settings);
   const block18Changed = previousBlock18 !== settings.block18PlusContent;
@@ -168,6 +177,7 @@ const handleSettingsUpdate = (settings: ExtensionSettings): void => {
   if (settings.blockingEnabled) {
     ensureInitialized();
     if (shouldReprocess) {
+      resetBlockedContent(previousStyle);
       processPage();
       sidebarFilter.resetState();
       sidebarFilter.triggerRefresh();
@@ -177,13 +187,10 @@ const handleSettingsUpdate = (settings: ExtensionSettings): void => {
     }
   } else if (wasBlocking) {
     log("Guard Your Mind blocking disabled via settings");
+    resetBlockedContent(previousStyle);
   }
 
   if (previousStyle === "blur" && settings.blockingStyle !== "blur") {
-    clearBlurredContent();
-  }
-
-  if (!settings.blockingEnabled && previousStyle === "blur") {
     clearBlurredContent();
   }
 };

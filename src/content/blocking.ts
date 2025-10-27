@@ -7,6 +7,7 @@ import {
   blurElement,
   clearBlurredElements,
 } from "./placeholders";
+import { registerBlockedElement, restoreBlockedElements } from "./blockedElements";
 import { getBlockingStyle, isBlockingEnabled } from "./state";
 
 export type PlaceholderFactory = (original: Element, style: BlockingStyle) => Element;
@@ -16,6 +17,7 @@ export const applyBlockingToElement = (element: Element, factory?: PlaceholderFa
 
   switch (style) {
     case "remove": {
+      registerBlockedElement(element, style, null);
       element.remove();
       break;
     }
@@ -26,6 +28,7 @@ export const applyBlockingToElement = (element: Element, factory?: PlaceholderFa
     case "quotes": {
       const placeholder = factory ? factory(element, style) : createQuotePlaceholder(element);
       placeholder.classList.add(CONFIG.blankedClass);
+      registerBlockedElement(element, style, placeholder);
       element.replaceWith(placeholder);
       break;
     }
@@ -33,6 +36,7 @@ export const applyBlockingToElement = (element: Element, factory?: PlaceholderFa
     default: {
       const placeholder = factory ? factory(element, style) : createPlaceholder(element);
       placeholder.classList.add(CONFIG.blankedClass);
+      registerBlockedElement(element, style, placeholder);
       element.replaceWith(placeholder);
       break;
     }
@@ -111,6 +115,8 @@ export const processPage = (): void => {
 export const clearBlurredContent = (): void => {
   clearBlurredElements();
 };
+
+export { restoreBlockedElements };
 
 export const createSearchPlaceholder = (): HTMLDivElement => {
   const placeholder = document.createElement("div");
