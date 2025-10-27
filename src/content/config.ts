@@ -72,11 +72,3 @@ export const SELECTORS = {
     cssId: "gym-hide-nsfw-search",
   },
 };
-
-export const QUOTES = [
-  "Small habits today shape who you become tomorrow.",
-  "You get stronger every time you choose what uplifts you.",
-  "Guard your focus and your focus will guard your goals.",
-  "Discipline is doing what matters even when it’s hard.",
-  "Feed the mind with purpose, not distraction.",
-];

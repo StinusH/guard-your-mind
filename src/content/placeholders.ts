@@ -1,12 +1,5 @@
-import { CONFIG, QUOTES } from "./config";
-
-let quoteIndex = 0;
-
-const getNextQuote = (): string => {
-  const quote = QUOTES[quoteIndex % QUOTES.length];
-  quoteIndex += 1;
-  return quote;
-};
+import { CONFIG } from "./config";
+import { getRandomQuote } from "./quotes";
 
 export function createPlaceholder(originalElement: Element): HTMLDivElement {
   const placeholder = document.createElement("div");
@@ -21,32 +14,76 @@ export function createPlaceholder(originalElement: Element): HTMLDivElement {
     border: 1px solid #edeff1;
     border-radius: 4px;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     margin: ${computedStyle.margin};
-    padding: ${computedStyle.padding};
-    color: #7c7c7c;
+    padding: 16px;
+    color: #4b4b4b;
     font-size: 14px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   `;
+  placeholder.style.boxSizing = "border-box";
 
-  placeholder.innerHTML = `
-    <div style="text-align: center; padding: 20px;">
-      <div style="font-weight: 500; margin-bottom: 4px;">Content Blocked</div>
-      <div style="font-size: 12px; opacity: 0.7;">Blocked by Guard Your Mind</div>
-    </div>
+  const contentWrapper = document.createElement("div");
+  contentWrapper.style.cssText = `
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    text-align: center;
+    width: 100%;
   `;
+
+  const headline = document.createElement("div");
+  headline.textContent = "Content Blocked";
+  headline.style.cssText = `
+    font-weight: 600;
+    font-size: 16px;
+  `;
+
+  const subline = document.createElement("div");
+  subline.textContent = "Blocked by Guard Your Mind";
+  subline.style.cssText = `
+    font-size: 12px;
+    opacity: 0.7;
+  `;
+
+  contentWrapper.append(headline, subline);
+  placeholder.appendChild(contentWrapper);
 
   return placeholder;
 }
 
 export function createQuotePlaceholder(originalElement: Element): HTMLDivElement {
   const placeholder = createPlaceholder(originalElement);
-  placeholder.innerHTML = `
-    <div style="text-align: center; padding: 20px; display: flex; flex-direction: column; gap: 8px;">
-      <div style="font-weight: 500; font-size: 13px; opacity: 0.8;">Guard Your Mind</div>
-      <div style="font-size: 14px; line-height: 1.4;">“${getNextQuote()}”</div>
-    </div>
+  placeholder.replaceChildren();
+
+  const contentWrapper = document.createElement("div");
+  contentWrapper.style.cssText = `
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    text-align: center;
+    width: 100%;
   `;
+
+  const headline = document.createElement("div");
+  headline.textContent = "Guard Your Mind";
+  headline.style.cssText = `
+    font-weight: 600;
+    font-size: 14px;
+    opacity: 0.8;
+  `;
+
+  const quoteText = document.createElement("div");
+  quoteText.textContent = `“${getRandomQuote()}”`;
+  quoteText.style.cssText = `
+    font-size: 15px;
+    line-height: 1.5;
+  `;
+
+  contentWrapper.append(headline, quoteText);
+  placeholder.appendChild(contentWrapper);
   return placeholder;
 }
