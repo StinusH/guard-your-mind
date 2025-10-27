@@ -55,13 +55,24 @@ const filterRecentSearches = (shadowRoot: ShadowRoot): void => {
     return;
   }
 
-  const recentSearchItems = shadowRoot.querySelectorAll(SELECTORS.shadowDOM.recentSearchItem);
+  const recentSearchItems = Array.from(
+    shadowRoot.querySelectorAll(SELECTORS.shadowDOM.recentSearchItem),
+  );
 
   recentSearchItems.forEach((item) => {
-    if (isNSFWRecentSearch(item) && !item.classList.contains(CONFIG.blankedClass)) {
-      item.classList.add(CONFIG.blankedClass);
-      applyBlockingToElement(item, () => createRecentSearchPlaceholder());
+    if (!isNSFWRecentSearch(item)) {
+      return;
     }
+
+    const host = item.closest<HTMLElement>("faceplate-typeahead-result, faceplate-tracker");
+    const target = host ?? item;
+
+    if (target.classList.contains(CONFIG.blankedClass)) {
+      return;
+    }
+
+    target.classList.add(CONFIG.blankedClass);
+    applyBlockingToElement(target, () => createRecentSearchPlaceholder());
   });
 };
 
