@@ -100,6 +100,7 @@ export async function getSettings(): Promise<ExtensionSettings> {
       };
 
       merged.blockingStyle = sanitizeBlockingStyle(stored?.blockingStyle);
+      merged.blockingEnabled = true;
 
       resolve(merged);
     });
@@ -108,7 +109,12 @@ export async function getSettings(): Promise<ExtensionSettings> {
 
 export async function setSettings(settings: ExtensionSettings): Promise<void> {
   return new Promise((resolve, reject) => {
-    storageArea.set({ [STORAGE_KEY]: settings }, () => {
+    const nextSettings: ExtensionSettings = {
+      ...settings,
+      blockingEnabled: true,
+    };
+
+    storageArea.set({ [STORAGE_KEY]: nextSettings }, () => {
       const error = chrome.runtime.lastError;
       if (error) {
         reject(new Error(error.message));
@@ -135,6 +141,7 @@ export function subscribeToSettings(callback: (settings: ExtensionSettings) => v
       };
 
       nextValue.blockingStyle = sanitizeBlockingStyle(stored?.blockingStyle);
+      nextValue.blockingEnabled = true;
 
       callback(nextValue);
     }

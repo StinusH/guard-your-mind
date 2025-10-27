@@ -103,7 +103,7 @@ export const createSettingsController = ({
     });
 
     styleSelect.value = settings.blockingStyle;
-    styleSelect.disabled = !settings.blockingEnabled || isSaving;
+    styleSelect.disabled = isSaving;
     updateStyleDescription(settings.blockingStyle);
   };
 

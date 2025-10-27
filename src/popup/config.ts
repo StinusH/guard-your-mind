@@ -1,6 +1,6 @@
 import type { BlockingStyle } from "../shared/settings";
 
-export type ToggleSettingKey = "blockingEnabled" | "block18PlusContent" | "showBlockedCounter";
+export type ToggleSettingKey = "block18PlusContent" | "showBlockedCounter";
 
 export interface ToggleSettingField {
   key: ToggleSettingKey;
@@ -16,11 +16,6 @@ export interface BlockingStyleOption {
 }
 
 export const TOGGLE_FIELDS: ToggleSettingField[] = [
-  {
-    key: "blockingEnabled",
-    label: "Enable Reddit blocking",
-    description: "Blank mature (18+) content on Reddit across all pages.",
-  },
   {
     key: "block18PlusContent",
     label: 'Block posts tagged "18+"',
